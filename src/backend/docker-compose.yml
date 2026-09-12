@@ -1,0 +1,139 @@
+# Composición de referencia para levantar la plataforma en desarrollo local.
+# Los healthchecks y el HSM/KMS real quedan fuera del alcance de este archivo
+# (ver docs/07-seguridad/modelo-seguridad.md) — en este compose,
+# SecureSign.Crypto.Api usa el proveedor de software solo para desarrollo.
+#
+# Las migraciones de EF Core NO las aplica cada Api al arrancar (ver
+# src/Migrator) — cada servicio con estado tiene un job "*-migrate" que
+# corre una sola vez, aplica su esquema, y termina; el Api correspondiente
+# solo arranca si ese job termina con éxito (`service_completed_successfully`).
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: src/Gateway/SecureSign.Gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - securesign-documents-api
+      - securesign-signature-api
+      - securesign-evidence-api
+      - securesign-identity-api
+
+  # --- Migraciones (una por servicio con estado, corren una vez y terminan) ---
+
+  securesign-identity-migrate:
+    build:
+      context: .
+      dockerfile: src/Migrator/Dockerfile
+    command: ["identity"]
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=securesign_identity;Username=securesign;Password=securesign_dev_only"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  securesign-documents-migrate:
+    build:
+      context: .
+      dockerfile: src/Migrator/Dockerfile
+    command: ["documents"]
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=securesign_documents;Username=securesign;Password=securesign_dev_only"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  securesign-signature-migrate:
+    build:
+      context: .
+      dockerfile: src/Migrator/Dockerfile
+    command: ["signature"]
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=securesign_signature;Username=securesign;Password=securesign_dev_only"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  securesign-evidence-migrate:
+    build:
+      context: .
+      dockerfile: src/Migrator/Dockerfile
+    command: ["evidence"]
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=securesign_evidence;Username=securesign;Password=securesign_dev_only"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Servicios de aplicación ---
+
+  securesign-identity-api:
+    build:
+      context: .
+      dockerfile: src/Services/SecureSign.Identity/SecureSign.Identity.Api/Dockerfile
+    expose: ["8080"]
+    depends_on:
+      securesign-identity-migrate:
+        condition: service_completed_successfully
+
+  securesign-documents-api:
+    build:
+      context: .
+      dockerfile: src/Services/SecureSign.Documents/SecureSign.Documents.Api/Dockerfile
+    expose: ["8080"]
+    depends_on:
+      securesign-documents-migrate:
+        condition: service_completed_successfully
+
+  securesign-signature-api:
+    build:
+      context: .
+      dockerfile: src/Services/SecureSign.Signature/SecureSign.Signature.Api/Dockerfile
+    expose: ["8080"]
+    depends_on:
+      securesign-signature-migrate:
+        condition: service_completed_successfully
+      securesign-identity-api:
+        condition: service_started
+
+  securesign-evidence-api:
+    build:
+      context: .
+      dockerfile: src/Services/SecureSign.Evidence/SecureSign.Evidence.Api/Dockerfile
+    expose: ["8080"]
+    depends_on:
+      securesign-evidence-migrate:
+        condition: service_completed_successfully
+
+  securesign-crypto-api:
+    build:
+      context: .
+      dockerfile: src/Services/SecureSign.Crypto/SecureSign.Crypto.Api/Dockerfile
+    expose: ["8080"]
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: securesign
+      POSTGRES_PASSWORD: securesign_dev_only
+    volumes:
+      - ./database/init:/docker-entrypoint-initdb.d
+      - securesign_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securesign"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+volumes:
+  securesign_pg_data:

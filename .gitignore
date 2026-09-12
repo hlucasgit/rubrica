@@ -1,0 +1,22 @@
+## .NET
+bin/
+obj/
+*.user
+.vs/
+
+## Node (frontend futuro / SDK JS)
+node_modules/
+dist/
+
+## Python
+__pycache__/
+*.pyc
+.venv/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Artefactos de pruebas de integración
+src/backend/ejemplos-integracion/*.out
+src/backend/ejemplos-integracion/contrato-demo.txt

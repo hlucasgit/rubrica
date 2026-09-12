@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Services\SecureSign.Evidence\SecureSign.Evidence.Domain\SecureSign.Evidence.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Services\SecureSign.Signature\SecureSign.Signature.Domain\SecureSign.Signature.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Services\SecureSign.Identity\SecureSign.Identity.Domain\SecureSign.Identity.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Services\SecureSign.Documents\SecureSign.Documents.Domain\SecureSign.Documents.Domain.csproj" />
+    <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Domain\SecureSign.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

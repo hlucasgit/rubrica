@@ -1,0 +1,6 @@
+@SecureSign.Crypto.Api_HostAddress = http://localhost:5207
+
+GET {{SecureSign.Crypto.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

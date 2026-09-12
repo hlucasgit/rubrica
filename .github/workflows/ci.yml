@@ -1,0 +1,74 @@
+name: CI — build, test y migraciones
+
+# Pipeline de referencia: valida que la solución compila, que las 30 pruebas
+# unitarias pasan, y que las migraciones de EF Core de los 4 servicios con
+# estado se aplican correctamente contra un PostgreSQL real (servicio
+# efímero de este job) usando SecureSign.Migrator — es decir, el mismo paso
+# explícito que en producción correría antes de desplegar cada servicio,
+# ahora ejecutado como verificación en cada push/PR en vez de solo
+# documentado. Ver src/backend/README.md, "Siguiente paso lógico de
+# desarrollo".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test-migrate:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: securesign
+          POSTGRES_PASSWORD: securesign_dev_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U securesign"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restaurar
+        run: dotnet restore src/backend/SecureSign.sln
+
+      - name: Compilar
+        run: dotnet build src/backend/SecureSign.sln --no-restore --configuration Release
+
+      - name: Pruebas unitarias
+        run: dotnet test src/backend/tests/SecureSign.UnitTests/SecureSign.UnitTests.csproj --no-build --configuration Release
+
+      - name: Crear bases de datos de cada servicio
+        env:
+          PGPASSWORD: securesign_dev_only
+        run: |
+          psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_documents;"
+          psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_signature;"
+          psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_evidence;"
+          psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_identity;"
+
+      # Este es el paso que antes hacía cada Api sola al arrancar
+      # (Database.Migrate() en Program.cs) — ahora es un paso de pipeline
+      # explícito, visible y que falla el build si una migración es inválida,
+      # antes de intentar desplegar nada.
+      - name: Aplicar migraciones (documents, signature, evidence, identity)
+        env:
+          ConnectionStrings__Postgres_Documents: "Host=localhost;Port=5432;Database=securesign_documents;Username=securesign;Password=securesign_dev_only"
+          ConnectionStrings__Postgres_Signature: "Host=localhost;Port=5432;Database=securesign_signature;Username=securesign;Password=securesign_dev_only"
+          ConnectionStrings__Postgres_Evidence: "Host=localhost;Port=5432;Database=securesign_evidence;Username=securesign;Password=securesign_dev_only"
+          ConnectionStrings__Postgres_Identity: "Host=localhost;Port=5432;Database=securesign_identity;Username=securesign;Password=securesign_dev_only"
+        run: |
+          ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Documents" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- documents
+          ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Signature" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- signature
+          ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Evidence" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- evidence
+          ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Identity" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- identity

@@ -1,0 +1,6 @@
+@SecureSign.Gateway_HostAddress = http://localhost:5124
+
+GET {{SecureSign.Gateway_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
