@@ -35,14 +35,21 @@ public sealed class EstampadorVisualDocumentoPdf : IEstampadorVisualDocumento
             double anchoPx = marca.Ancho * anchoPagina;
             double altoPx = marca.Alto * altoPagina;
             double xPx = marca.X * anchoPagina;
-            // La posición se eligió con origen arriba-izquierda (como el
-            // visor en el navegador); PDF mide Y desde abajo — se invierte.
-            double yPx = altoPagina - (marca.Y * altoPagina) - altoPx;
+            // NO hay que invertir Y: XGraphics.FromPdfPage ya expone un
+            // sistema de coordenadas con origen arriba-izquierda y Y
+            // creciendo hacia abajo (como GDI+/canvas), igual que el visor
+            // en el navegador — es PdfSharpCore quien traduce esto a las
+            // coordenadas PDF nativas (origen abajo-izquierda) al dibujar.
+            // Invertir aquí además duplicaba la conversión y dejaba el
+            // sello cerca del borde superior en vez de donde se eligió.
+            double yPx = marca.Y * altoPagina;
 
             var recuadro = new XRect(xPx, yPx, anchoPx, altoPx);
             gfx.DrawRectangle(new XPen(XColors.DarkBlue, 1), recuadro);
 
-            var fuente = new XFont("Arial", 7);
+            // "Liberation Sans" (no "Arial"): la imagen del contenedor no
+            // trae fuentes propietarias — ver el Dockerfile de Signature.Api.
+            var fuente = new XFont("Liberation Sans", 7);
             var lineas = new[]
             {
                 $"Firmado digitalmente por {marca.NombreFirmante}",
