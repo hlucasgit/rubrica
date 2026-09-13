@@ -6,6 +6,7 @@ using SecureSign.Signature.Application.ConsultarEstado;
 using SecureSign.Signature.Application.CrearSolicitudFirma;
 using SecureSign.Signature.Application.EstablecerPosicionFirma;
 using SecureSign.Signature.Application.FirmarDocumento;
+using SecureSign.Signature.Application.FirmarLocal;
 using SecureSign.Signature.Application.FirmarLote;
 using SecureSign.Signature.Application.ListarPendientes;
 using SecureSign.Signature.Application.NotificarSolicitud;
@@ -33,6 +34,13 @@ public sealed record RechazarFirmaRequest(string Motivo);
 /// guarda ni se registra: viaja solo dentro de esta petición puntual.
 /// </param>
 public sealed record FirmarRequest(string? Pin = null);
+
+/// <summary>
+/// Resultado del Firmador Local (ver docs/RUNBOOK.md sección 12): la firma
+/// ya fue calculada en la máquina del firmante, con su propio certificado —
+/// aquí solo se envía el resultado para verificar y completar el flujo.
+/// </summary>
+public sealed record FirmarLocalRequest(string FirmaBase64, string CertificadoBase64, string Algoritmo);
 
 /// <summary>Coordenadas normalizadas (0..1, origen arriba-izquierda) elegidas en el visor — ver PosicionFirma.</summary>
 public sealed record PosicionFirmaRequest(int NumeroPagina, double X, double Y, double Ancho, double Alto);
@@ -181,6 +189,26 @@ public sealed class FirmasController(ISender mediator) : ControllerBase
         return resultado.EsExitoso
             ? File(resultado.Valor.Contenido, resultado.Valor.TipoContenido, resultado.Valor.NombreArchivo)
             : NotFound(new { error = "NO_ENCONTRADO", mensaje = resultado.Error });
+    }
+
+    /// <summary>
+    /// POST /api/firmas/{id}/flujos/{flujoId}/completar-firma-local — la
+    /// invoca el Firmador Local (ver RUNBOOK.md sección 12) tras firmar el
+    /// hash del documento en la propia máquina del firmante, con su propio
+    /// certificado (DNIe u otro token). El PIN nunca llega a este servicio.
+    /// </summary>
+    [HttpPost("{id:guid}/flujos/{flujoId:guid}/completar-firma-local")]
+    public async Task<IActionResult> CompletarFirmaLocal(Guid id, Guid flujoId, [FromBody] FirmarLocalRequest body, CancellationToken ct)
+    {
+        var tenant = User.ObtenerTenantContext();
+        var comando = new FirmarLocalCommand(
+            tenant.TenantId, id, flujoId, body.FirmaBase64, body.CertificadoBase64, body.Algoritmo, CapturarContexto());
+
+        var resultado = await mediator.Send(comando, ct);
+
+        return resultado.EsExitoso
+            ? Ok(resultado.Valor)
+            : BadRequest(new { error = "FIRMA_LOCAL_INVALIDA", mensaje = resultado.Error });
     }
 
     /// <summary>POST /api/firmas/{id}/flujos/{flujoId}/rechazar</summary>

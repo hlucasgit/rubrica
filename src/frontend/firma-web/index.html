@@ -266,6 +266,20 @@
         <button class="accion secundario" id="btnVerValidacion">Ver validación pública</button>
       </div>
     </div>
+
+    <div class="tarjeta" id="tarjetaFirmadorLocal" style="display:none">
+      <h2>...o firma con tu propio certificado (DNIe u otro token)</h2>
+      <p class="ayuda">
+        Requiere el <b>Firmador Local</b> instalado (ver <code>src/backend/RUNBOOK.md</code> sección 12).
+        A diferencia del campo de PIN de arriba, aquí tu PIN <b>nunca sale de tu computadora</b> —
+        ni siquiera hacia SecureSign: el Firmador Local descarga el documento, lo firma con tu
+        tarjeta ahí mismo, y solo envía de vuelta el resultado.
+      </p>
+      <div class="fila">
+        <button class="accion secundario" id="btnFirmarConFirmadorLocal">Abrir Firmador Local y firmar</button>
+      </div>
+      <div id="mensajeFirmadorLocal"></div>
+    </div>
   </section>
 
   <!-- ===================== TAB: FIRMA MASIVA ===================== -->

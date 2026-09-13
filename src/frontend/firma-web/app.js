@@ -150,6 +150,7 @@ document.getElementById("btnCargarIndividual").addEventListener("click", async (
 
     document.getElementById("tarjetaVisor").style.display = "block";
     document.getElementById("tarjetaFirmar").style.display = "block";
+    document.getElementById("tarjetaFirmadorLocal").style.display = "block";
     document.getElementById("accionesPostFirma").style.display = "none";
     document.getElementById("btnGuardarPosicion").disabled = true;
     document.getElementById("cajaFirma").style.display = "none";
@@ -328,6 +329,51 @@ document.getElementById("btnVerValidacion").addEventListener("click", async () =
     mostrarMensaje("mensajeFirmaIndividual", `Error al validar: ${e.message}`, "error");
   }
 });
+
+// ---------- Firmador Local (securesign://) ----------
+
+document.getElementById("btnFirmarConFirmadorLocal").addEventListener("click", async () => {
+  const { solicitudId, flujoId } = estado.individual;
+  const parametros = {
+    gatewayUrl: estado.gatewayUrl,
+    solicitudId,
+    flujoId,
+    accessToken: estado.token,
+  };
+  const base64 = btoa(JSON.stringify(parametros));
+  const uri = `securesign://firmar?param=${encodeURIComponent(base64)}`;
+
+  mostrarMensaje("mensajeFirmadorLocal",
+    "Abriendo el Firmador Local... revisa la ventana de consola que se abrió para elegir tu certificado e ingresar tu PIN.", "info");
+
+  window.location.href = uri;
+
+  esperarFirmaDelFirmadorLocal(solicitudId, flujoId);
+});
+
+async function esperarFirmaDelFirmadorLocal(solicitudId, flujoId) {
+  const limiteIntentos = 60; // ~3 minutos a 3s por intento
+  for (let intento = 0; intento < limiteIntentos; intento++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      const detalle = await apiJson(`/api/firmas/${solicitudId}/estado`);
+      const flujo = detalle.firmantes.find((f) => f.flujoFirmaId === flujoId);
+      if (flujo?.estado === "Firmado") {
+        mostrarMensaje("mensajeFirmadorLocal", "El Firmador Local completó la firma correctamente.", "ok");
+        document.getElementById("accionesPostFirma").style.display = "block";
+        return;
+      }
+      if (flujo?.estado === "Rechazado") {
+        mostrarMensaje("mensajeFirmadorLocal", "El flujo fue rechazado.", "error");
+        return;
+      }
+    } catch {
+      // Sigue esperando — un error puntual de red no debe detener el sondeo.
+    }
+  }
+  mostrarMensaje("mensajeFirmadorLocal",
+    "No se detectó la firma todavía. Si el Firmador Local mostró un error, revisa su consola; si no se abrió, confirma que esté instalado (RUNBOOK.md sección 12).", "error");
+}
 
 // ---------- firma masiva ----------
 
