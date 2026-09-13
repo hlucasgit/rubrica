@@ -30,8 +30,9 @@ public sealed class ProveedorCriptograficoSoftware : IProveedorCriptografico
         return Task.FromResult(referencia);
     }
 
-    public Task<ResultadoFirmaCriptografica> FirmarAsync(string referenciaLlave, byte[] hashDocumento, AlgoritmoFirma algoritmo, CancellationToken ct = default)
+    public Task<ResultadoFirmaCriptografica> FirmarAsync(string referenciaLlave, byte[] hashDocumento, AlgoritmoFirma algoritmo, string? credencial = null, CancellationToken ct = default)
     {
+        // credencial se ignora: las llaves de software no requieren PIN.
         if (!_llaves.TryGetValue(referenciaLlave, out var llave))
             throw new InvalidOperationException($"Referencia de llave no encontrada: {referenciaLlave}");
 

@@ -53,6 +53,19 @@ public sealed class SignatureDbContext(DbContextOptions<SignatureDbContext> opti
             b.Property(f => f.TokenAccesoUnico).HasMaxLength(100).IsRequired();
             b.Property(f => f.MotivoRechazo).HasMaxLength(500);
 
+            // PosicionFirma es un value object opcional (null hasta que el
+            // firmante la fija en el visor) — se mapea como owned type para
+            // que sus 5 componentes vivan como columnas nullable propias de
+            // FlujosFirma, sin una tabla aparte.
+            b.OwnsOne(f => f.Posicion, p =>
+            {
+                p.Property(x => x.NumeroPagina).HasColumnName("PosicionNumeroPagina");
+                p.Property(x => x.X).HasColumnName("PosicionX");
+                p.Property(x => x.Y).HasColumnName("PosicionY");
+                p.Property(x => x.Ancho).HasColumnName("PosicionAncho");
+                p.Property(x => x.Alto).HasColumnName("PosicionAlto");
+            });
+
             b.HasIndex(f => f.TokenAccesoUnico).IsUnique();
             b.HasIndex(f => new { f.FirmanteUsuarioId, f.Estado });
         });

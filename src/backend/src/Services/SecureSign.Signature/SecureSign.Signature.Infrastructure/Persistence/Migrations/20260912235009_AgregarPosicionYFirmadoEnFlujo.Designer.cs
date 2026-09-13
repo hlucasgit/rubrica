@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SecureSign.Signature.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SecureSign.Signature.Infrastructure.Persistence;
 namespace SecureSign.Signature.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(SignatureDbContext))]
-    partial class SignatureDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260912235009_AgregarPosicionYFirmadoEnFlujo")]
+    partial class AgregarPosicionYFirmadoEnFlujo
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

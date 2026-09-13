@@ -99,6 +99,18 @@ public sealed class SolicitudFirma : Entity
         return Result.Exitoso();
     }
 
+    /// <summary>
+    /// El firmante elige, en el visor, dónde debe verse su firma (página +
+    /// coordenadas normalizadas). Debe llamarse antes de ConfirmarFirma —
+    /// ver PosicionFirma y IEstampadorVisualDocumento.
+    /// </summary>
+    public Result EstablecerPosicionFirma(Guid flujoFirmaId, PosicionFirma posicion)
+    {
+        var flujo = _flujos.FirstOrDefault(f => f.Id == flujoFirmaId);
+        if (flujo is null) return Result.Fallido("Flujo de firma no encontrado.");
+        return flujo.EstablecerPosicion(posicion);
+    }
+
     public Result RegistrarVisualizacion(Guid flujoFirmaId)
     {
         var flujo = _flujos.FirstOrDefault(f => f.Id == flujoFirmaId);

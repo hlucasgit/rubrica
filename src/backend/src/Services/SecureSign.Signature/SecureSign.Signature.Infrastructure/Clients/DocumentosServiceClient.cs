@@ -23,4 +23,19 @@ public sealed class DocumentosServiceClient(HttpClient http) : IDocumentosServic
         var respuesta = await http.PostAsync($"/api/documentos/{documentoId}/marcar-firmado", content: null, ct);
         respuesta.EnsureSuccessStatusCode();
     }
+
+    public async Task<ContenidoDocumentoRemoto?> ObtenerContenidoAsync(Guid documentoId, CancellationToken ct = default)
+    {
+        var respuesta = await http.GetAsync($"/api/documentos/{documentoId}/contenido", ct);
+        if (respuesta.StatusCode == HttpStatusCode.NotFound) return null;
+        respuesta.EnsureSuccessStatusCode();
+
+        var contenido = await respuesta.Content.ReadAsByteArrayAsync(ct);
+        var tipoContenido = respuesta.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+        var nombreArchivo = respuesta.Content.Headers.ContentDisposition?.FileNameStar
+            ?? respuesta.Content.Headers.ContentDisposition?.FileName
+            ?? documentoId.ToString();
+
+        return new ContenidoDocumentoRemoto(contenido, tipoContenido, nombreArchivo);
+    }
 }

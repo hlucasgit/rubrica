@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecureSign Perú — Visor de firma</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --azul: #0b3d91;
+    --azul-claro: #e8eefb;
+    --gris: #5b6472;
+    --borde: #d7dce3;
+    --verde: #1e7e34;
+    --rojo: #b3261e;
+    --fondo: #f4f6f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--fondo);
+    color: #1c2430;
+  }
+  header {
+    background: var(--azul);
+    color: white;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .estado-conexion { font-size: 12px; opacity: 0.9; }
+  nav.tabs {
+    display: flex;
+    background: white;
+    border-bottom: 1px solid var(--borde);
+  }
+  nav.tabs button {
+    flex: none;
+    padding: 12px 20px;
+    border: none;
+    background: none;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--gris);
+    border-bottom: 3px solid transparent;
+  }
+  nav.tabs button.activo {
+    color: var(--azul);
+    border-bottom-color: var(--azul);
+    font-weight: 600;
+  }
+  main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+  section.panel { display: none; }
+  section.panel.activo { display: block; }
+  .tarjeta {
+    background: white;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .tarjeta h2 { font-size: 15px; margin: 0 0 12px; color: var(--azul); }
+  .fila { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 10px; }
+  .campo { display: flex; flex-direction: column; gap: 4px; }
+  .campo label { font-size: 12px; color: var(--gris); }
+  .campo input, .campo select {
+    padding: 7px 9px;
+    border: 1px solid var(--borde);
+    border-radius: 5px;
+    font-size: 13px;
+    min-width: 220px;
+  }
+  button.accion {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    background: var(--azul);
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.accion:disabled { background: #a9b6c9; cursor: not-allowed; }
+  button.secundario {
+    background: white;
+    color: var(--azul);
+    border: 1px solid var(--azul);
+  }
+  .mensaje { font-size: 13px; padding: 8px 10px; border-radius: 5px; margin-top: 8px; }
+  .mensaje.ok { background: #e6f4ea; color: var(--verde); }
+  .mensaje.error { background: #fbeae9; color: var(--rojo); }
+  .mensaje.info { background: var(--azul-claro); color: var(--azul); }
+  pre.json {
+    background: #0b1220;
+    color: #d7e2f5;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    overflow-x: auto;
+    max-height: 220px;
+  }
+  .visor {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .visor-documento {
+    position: relative;
+    border: 1px solid var(--borde);
+    background: #333;
+    display: inline-block;
+    line-height: 0;
+  }
+  .visor-documento canvas { display: block; max-width: 100%; }
+  .caja-firma {
+    position: absolute;
+    border: 2px dashed #ff9800;
+    background: rgba(255, 152, 0, 0.15);
+    display: none;
+    cursor: move;
+    font-size: 10px;
+    color: #7a4a00;
+    padding: 2px;
+    pointer-events: none;
+  }
+  .controles-pagina {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .ajustes-caja { min-width: 220px; display: flex; flex-direction: column; gap: 10px; }
+  .ajustes-caja label { font-size: 12px; color: var(--gris); display: block; margin-bottom: 3px; }
+  table.pendientes { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.pendientes th, table.pendientes td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--borde); }
+  table.pendientes th { color: var(--gris); font-weight: 600; font-size: 12px; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--azul-claro); color: var(--azul); }
+  .ayuda { font-size: 12px; color: var(--gris); margin-top: 4px; }
+  .pasos { font-size: 13px; color: var(--gris); margin-bottom: 10px; }
+  .pasos b { color: #1c2430; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SecureSign Perú — Visor de firma (referencia)</h1>
+  <span class="estado-conexion" id="estadoConexion">Sin conexión</span>
+</header>
+
+<nav class="tabs">
+  <button class="activo" data-tab="conexion">1. Conexión</button>
+  <button data-tab="individual">2. Firmar un documento</button>
+  <button data-tab="masiva">3. Firma masiva</button>
+</nav>
+
+<main>
+
+  <!-- ===================== TAB: CONEXIÓN ===================== -->
+  <section class="panel activo" id="tab-conexion">
+    <div class="tarjeta">
+      <h2>Gateway y credenciales</h2>
+      <p class="ayuda">Este visor habla directamente con el Gateway de SecureSign (por defecto <code>http://localhost:8080</code>, el mismo que usas por PowerShell en el RUNBOOK). El token nunca se guarda en disco — solo vive en esta pestaña mientras la tengas abierta.</p>
+      <div class="fila">
+        <div class="campo">
+          <label>URL del Gateway</label>
+          <input id="gatewayUrl" value="http://localhost:8080">
+        </div>
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label>Client ID (demo)</label>
+          <input id="clientId" value="sgd-demo">
+        </div>
+        <div class="campo">
+          <label>Client Secret (demo)</label>
+          <input id="clientSecret" value="demo-secret-not-for-production">
+        </div>
+        <button class="accion" id="btnObtenerToken">Obtener token demo</button>
+      </div>
+      <div class="fila">
+        <div class="campo" style="flex:1">
+          <label>...o pega un token ya emitido</label>
+          <input id="tokenManual" placeholder="eyJhbGciOi...">
+        </div>
+        <button class="accion secundario" id="btnUsarTokenManual">Usar este token</button>
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label>Tu ID de firmante (UsuarioId) — para "mis pendientes"</label>
+          <input id="firmanteId" placeholder="44444444-4444-4444-4444-444444444444">
+        </div>
+      </div>
+      <div id="mensajeConexion"></div>
+    </div>
+  </section>
+
+  <!-- ===================== TAB: FIRMA INDIVIDUAL ===================== -->
+  <section class="panel" id="tab-individual">
+    <div class="tarjeta">
+      <h2>Cargar una solicitud de firma</h2>
+      <div class="fila">
+        <div class="campo">
+          <label>Solicitud de firma (ID)</label>
+          <input id="ind-solicitudId">
+        </div>
+        <div class="campo">
+          <label>Flujo de firma (ID)</label>
+          <input id="ind-flujoId">
+        </div>
+        <button class="accion" id="btnCargarIndividual">Cargar documento</button>
+      </div>
+      <div id="mensajeIndividualCarga"></div>
+    </div>
+
+    <div class="tarjeta" id="tarjetaVisor" style="display:none">
+      <h2>Elige dónde va tu firma</h2>
+      <p class="pasos">Haz clic sobre la página donde quieras que aparezca tu firma. Ajusta el tamaño con los controles y cambia de página si tu firma va en otra hoja.</p>
+      <div class="visor">
+        <div>
+          <div class="controles-pagina">
+            <button class="accion secundario" id="btnPaginaAnterior">◀ Anterior</button>
+            <span id="indicadorPagina">Página 1 / 1</span>
+            <button class="accion secundario" id="btnPaginaSiguiente">Siguiente ▶</button>
+          </div>
+          <div class="visor-documento" id="contenedorVisor">
+            <canvas id="canvasPdf"></canvas>
+            <div class="caja-firma" id="cajaFirma">Tu firma aquí</div>
+          </div>
+          <div id="mensajeSinPreview" class="mensaje info" style="display:none">
+            Este tipo de documento no tiene vista previa visual en este visor — puedes continuar sin elegir posición (se firmará igual, solo no habrá sello visual en el PDF).
+          </div>
+        </div>
+        <div class="ajustes-caja">
+          <div>
+            <label>Ancho del recuadro (% de la página)</label>
+            <input type="range" id="anchoCaja" min="10" max="60" value="30">
+          </div>
+          <div>
+            <label>Alto del recuadro (% de la página)</label>
+            <input type="range" id="altoCaja" min="4" max="25" value="8">
+          </div>
+          <div id="posicionActual" class="ayuda">Sin posición elegida todavía.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tarjeta" id="tarjetaFirmar" style="display:none">
+      <h2>Firmar</h2>
+      <div class="fila">
+        <button class="accion secundario" id="btnVisualizar">1. Marcar como visualizado</button>
+        <button class="accion secundario" id="btnGuardarPosicion" disabled>2. Guardar posición de firma</button>
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label>PIN de firma (tarjeta/token, si aplica)</label>
+          <input type="password" id="ind-pin" placeholder="Solo si tu Servicio Criptográfico usa PKCS#11 (DNIe)">
+        </div>
+        <button class="accion" id="btnFirmarIndividual">3. Firmar</button>
+      </div>
+      <div id="mensajeFirmaIndividual"></div>
+      <div id="accionesPostFirma" style="display:none">
+        <button class="accion secundario" id="btnDescargarVisual">Descargar documento con sello visual</button>
+        <button class="accion secundario" id="btnVerValidacion">Ver validación pública</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TAB: FIRMA MASIVA ===================== -->
+  <section class="panel" id="tab-masiva">
+    <div class="tarjeta">
+      <h2>Modo masivo</h2>
+      <p class="ayuda">Ingresa una sola vez tu PIN (si tu Servicio Criptográfico usa una tarjeta/token PKCS#11 real) para firmar varios documentos pendientes de una sola vez — ver <code>FirmarLoteHandler</code> / RUNBOOK.md sección 11.</p>
+      <div class="fila">
+        <button class="accion" id="btnBuscarPendientes">Buscar mis pendientes</button>
+      </div>
+      <div id="mensajePendientes"></div>
+      <table class="pendientes" id="tablaPendientes" style="display:none">
+        <thead>
+          <tr><th></th><th>Solicitud</th><th>Documento</th><th>Tipo de firma</th><th>Estado</th></tr>
+        </thead>
+        <tbody id="cuerpoPendientes"></tbody>
+      </table>
+    </div>
+
+    <div class="tarjeta" id="tarjetaLote" style="display:none">
+      <div class="fila">
+        <button class="accion secundario" id="btnVisualizarSeleccionados">1. Visualizar seleccionados</button>
+      </div>
+      <div class="fila">
+        <div class="campo">
+          <label>PIN de firma (una sola vez para todo el lote)</label>
+          <input type="password" id="lote-pin">
+        </div>
+        <button class="accion" id="btnFirmarLote" disabled>2. Firmar seleccionados</button>
+      </div>
+      <div id="mensajeLote"></div>
+      <pre class="json" id="resultadoLote" style="display:none"></pre>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

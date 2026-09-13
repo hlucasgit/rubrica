@@ -86,6 +86,27 @@ public sealed class DocumentosController(ISender mediator, IAlmacenamientoDocume
             : BadRequest(new { error = "TRANSICION_INVALIDA", mensaje = resultado.Error });
     }
 
+    /// <summary>
+    /// GET /api/documentos/{id}/contenido — bytes originales del documento,
+    /// en CUALQUIER estado (a diferencia de /firmado, que exige Firmado).
+    /// Uso interno (Servicio de Firma la usa para generar el sello visual,
+    /// ver IEstampadorVisualDocumento) y del visor del firmante (necesita
+    /// renderizar el PDF para que el usuario elija dónde colocar su firma
+    /// ANTES de que exista ninguna firma).
+    /// </summary>
+    [HttpGet("{id:guid}/contenido")]
+    public async Task<IActionResult> ObtenerContenido(Guid id, CancellationToken ct)
+    {
+        var tenant = User.ObtenerTenantContext();
+        var resultado = await mediator.Send(new ObtenerDocumentoQuery(tenant.TenantId, id), ct);
+
+        if (!resultado.EsExitoso)
+            return NotFound(new { error = "NO_ENCONTRADO", mensaje = resultado.Error });
+
+        var contenido = await almacenamiento.LeerAsync(resultado.Valor.UrlAlmacenamiento, ct);
+        return File(contenido, resultado.Valor.TipoContenido, resultado.Valor.NombreArchivo);
+    }
+
     /// <summary>GET /api/documentos/{id}/firmado — ver manual de integración 5.4.</summary>
     [HttpGet("{id:guid}/firmado")]
     public async Task<IActionResult> DescargarFirmado(Guid id, CancellationToken ct)

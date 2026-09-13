@@ -340,5 +340,120 @@ Ver [`ejemplos-integracion/firmar-documento.sh`](ejemplos-integracion/firmar-doc
 
 ## 9. Qué significa "operativo" aquí, en concreto
 
-- **Real**: autenticación JWT con verificación de firma HS256, comunicación HTTP real entre 6 procesos independientes, **persistencia real en PostgreSQL que sobrevive reinicios** (una base de datos por servicio, migraciones de EF Core aplicadas automáticamente), **Índice de Confianza Digital que bloquea de verdad la firma si el firmante no lo alcanza** (verificado: rechazo real, señal, aceptación real), **token exchange real (RFC 8693)** en toda llamada servicio-a-servicio (verificado con logs: ningún servicio interno ve el scope de negocio del cliente externo), firma criptográfica ECDSA real sobre el hash real del documento, cadena de evidencia con hash-chain verificable leída de base de datos.
-- **Simplificado a propósito** (ver `src/backend/README.md` para el detalle completo): el índice de confianza solo sube mediante señales registradas a mano contra el Servicio de Identidad, no automáticamente desde una validación OTP/biométrica real ni desde un Servicio de Certificados; el token de intercambio interno se firma con la misma llave simétrica que los tokens externos (no hay un STS separado); la llave criptográfica del firmante vive en memoria del proceso de Criptografía (no en un HSM); no hay integración con RENIEC/SMS/biometría ni con una Entidad de Certificación acreditada (por lo que la firma es "Avanzada"/"Digital" solo en el sentido técnico del scaffold, no con la presunción legal plena de la Ley 27269); las migraciones se aplican automáticamente al arrancar cada servicio (cómodo para desarrollo, no recomendado tal cual en producción).
+- **Real**: autenticación JWT con verificación de firma HS256, comunicación HTTP real entre 6 procesos independientes, **persistencia real en PostgreSQL que sobrevive reinicios** (una base de datos por servicio, migraciones de EF Core aplicadas automáticamente), **Índice de Confianza Digital que bloquea de verdad la firma si el firmante no lo alcanza** (verificado: rechazo real, señal, aceptación real), **token exchange real (RFC 8693)** en toda llamada servicio-a-servicio (verificado con logs: ningún servicio interno ve el scope de negocio del cliente externo), firma criptográfica real sobre el hash real del documento (ECDSA con el proveedor de software, o **RSA con una tarjeta DNIe real vía PKCS#11**, ver sección 10), cadena de evidencia con hash-chain verificable leída de base de datos, **posicionamiento visual de firma elegido por el firmante sobre la página** y **firma masiva con una sola credencial** (ver sección 11), con un visor web de referencia sin build que renderiza el PDF con pdf.js.
+- **Simplificado a propósito** (ver `src/backend/README.md` para el detalle completo): el índice de confianza solo sube mediante señales registradas a mano contra el Servicio de Identidad, no automáticamente desde una validación OTP/biométrica real ni desde un Servicio de Certificados; el token de intercambio interno se firma con la misma llave simétrica que los tokens externos (no hay un STS separado); con el proveedor de software, la llave criptográfica del firmante vive en memoria del proceso de Criptografía (no en un HSM) — con el proveedor PKCS#11, la llave privada nunca sale de la tarjeta; no hay integración con RENIEC/SMS/biometría ni con una Entidad de Certificación acreditada salvo el certificado real de la propia tarjeta DNIe cuando se usa PKCS#11 (por lo que la firma es "Avanzada"/"Digital" solo en el sentido técnico del scaffold, no con la presunción legal plena de la Ley 27269); las migraciones se aplican automáticamente al arrancar cada servicio (cómodo para desarrollo, no recomendado tal cual en producción).
+
+## 10. Firma con DNIe real (tarjeta física, vía PKCS#11) — verificado de punta a punta
+
+Todo el resto de este runbook usa `ProveedorCriptograficoSoftware` (una llave ECDSA en memoria, solo para desarrollo). El sistema también soporta un proveedor `ProveedorCriptograficoPkcs11` que firma con una tarjeta física real (probado con un DNIe peruano) a través del estándar PKCS#11, usando el certificado de la aplicación "Signature PIN" (etiqueta `FIR`) — la que tiene validez legal para firma, a diferencia de la de autenticación (`AUT`).
+
+**Por qué esto no corre en Docker como el resto**: el middleware PKCS#11 del DNIe (`idplug-pkcs11.dll`) es una DLL nativa de Windows que solo puede cargarse en un proceso Windows con acceso al lector de tarjetas — un contenedor Linux no puede usarla. Por eso, para esta única pieza, `SecureSign.Crypto.Api` debe correr nativo en el host (no en Docker), mientras el resto de la plataforma sigue en contenedores.
+
+### 10.1 Arrancar el resto de la plataforma en Docker, apuntando a Crypto.Api nativo
+
+`src/backend/.env` (no versionado — cada máquina apunta a su propio hardware) sobreescribe la URL y el algoritmo que usa Firma para llamar a Criptografía:
+
+```
+CRIPTOGRAFIA_API_URL=http://host.docker.internal:5003
+CRIPTOGRAFIA_ALGORITMO=RsaSha256
+```
+
+`host.docker.internal` es el nombre especial que Docker Desktop expone para que un contenedor llegue al host. Con ese `.env` presente:
+
+```bash
+cd src/backend
+docker compose down
+docker compose up -d --build
+```
+
+### 10.2 Arrancar Crypto.Api nativo en Windows con el proveedor PKCS#11
+
+```powershell
+$env:CriptoProveedor = "Pkcs11"
+dotnet run --project src/Services/SecureSign.Crypto/SecureSign.Crypto.Api --no-launch-profile --urls http://localhost:5003
+```
+
+> El mismo aviso de la sección 3 aplica aquí con más fuerza: sin `--no-launch-profile --urls http://localhost:5003`, `dotnet run` ignora `ASPNETCORE_URLS` y escucha en el puerto de `launchSettings.json` (`5207`) — Firma nunca lo encuentra y cada intento de firma falla con `500`. Esto ocurrió tal cual en esta sesión y así se diagnosticó.
+
+`appsettings.json` de Crypto.Api trae la ruta de la librería PKCS#11 y la etiqueta del certificado de firma:
+```json
+"Pkcs11": {
+  "RutaLibreria": "C:\\Program Files\\IDEMIA\\IDPlugClassic\\DLLs\\idplug-pkcs11.dll",
+  "EtiquetaCertificadoFirma": "FIR"
+}
+```
+Ajusta `RutaLibreria` si tu middleware de lector de tarjetas está instalado en otra ruta.
+
+### 10.3 El PIN: cómo entra al sistema sin exponerse
+
+El PIN de firma del DNIe viaja en el cuerpo JSON de la petición `POST /firmar` (campo `pin`), solo para esa llamada puntual — nunca se guarda, nunca se loguea, y `Crypto.Api` hace `session.Logout()` en un `finally` apenas termina de usarlo. La regla operativa es: **el PIN se escribe directamente en la consola de quien firma, nunca se pega en un chat o ticket**. En PowerShell, usar `Read-Host -AsSecureString` para que ni siquiera aparezca en pantalla al escribirlo:
+
+```powershell
+$pinSeguro = Read-Host -AsSecureString "PIN de firma DNIe"
+$pinPlano = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($pinSeguro))
+$firmarBody = @{ pin = $pinPlano } | ConvertTo-Json
+```
+
+### 10.4 Flujo ejecutado y verificado con una tarjeta DNIe real
+
+Con el resto de la plataforma en Docker (10.1) y Crypto.Api nativo con el proveedor PKCS#11 (10.2), se repitieron los pasos 4.1 a 4.6 de este runbook sin cambios (token, registrar documento, crear solicitud `tipoFirma: "Digital"`, consultar `flujoFirmaId`, visualizar, señal `CertificadoEmitido` para alcanzar índice 95 — el poseedor de un DNIe real sí cuenta con un certificado emitido, a diferencia del ejemplo simulado de la sección 5). Luego, en 4.7, la petición de firma incluyó el PIN real de la tarjeta (obtenido como en 10.3):
+
+```json
+{"estadoSolicitud":"Firmado","algoritmoFirma":"RsaSha256","firmaBase64":"e1h0VL+UkArqG50Fk5lGiNSusqXme5Wmrj1AeGDB79teNXdDvt0P4o9f8xhontXo7H..."}
+```
+
+Y la validación pública (4.9) sobre esta misma solicitud confirmó la firma real:
+```json
+{"documentoValido":true,"estado":"Firmado","firmantes":[{"orden":1,"estado":"Firmado"}]}
+```
+
+Esta secuencia se ejecutó tal cual en esta sesión, de extremo a extremo: Gateway → Firma → Identidad (gate de confianza) → Criptografía (PKCS#11, tarjeta física) → Documentos → Evidencia, con una firma RSA-2048/SHA-256 producida por hardware real (no software), verificable públicamente sin token.
+
+### 10.5 Limitaciones deliberadas de `ProveedorCriptograficoPkcs11`
+
+- Asume un único token/lector conectado por instancia de Crypto.Api — no hay enrutamiento multi-tarjeta ni multi-usuario concurrente sobre el mismo proceso.
+- Selecciona el certificado de firma por etiqueta (`FIR` por convención del DNIe peruano) y descarta certificados de CA usando `X509BasicConstraintsExtension.CertificateAuthority` (no basta con comparar Subject/Issuer: eso solo detecta raíces autofirmadas, no CAs intermedias).
+- La llave privada correspondiente se ubica emparejando el atributo estándar PKCS#11 `CKA_ID` del certificado elegido — no "la primera llave privada de la sesión".
+- El mecanismo `CKM_RSA_PKCS` no hashea internamente: el código antepone a mano el prefijo ASN.1 DigestInfo de SHA-256 (`3031300D060960864801650304020105000420`) antes de llamar a `C_Sign`.
+- Por diseño, este proveedor solo puede correr en un proceso Windows nativo con acceso al lector (ver 10.1).
+
+## 11. Firma visual, modo masivo y visor web (estilo Firma Perú/ONPE)
+
+Todo lo anterior se probó por API (curl/PowerShell). Esta sección añade lo que le falta a una experiencia real de usuario final: elegir **dónde** aparece la firma sobre la página, verla renderizada antes de firmar, y firmar varios documentos pendientes con una sola credencial en vez de repetir el flujo uno por uno.
+
+### 11.1 Endpoints nuevos
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /api/documentos/{id}/contenido` | Bytes originales del documento en **cualquier** estado (a diferencia de `/firmado`, que exige `Firmado`) — el visor lo usa para renderizar el PDF antes de que exista ninguna firma. |
+| `POST /api/firmas/{id}/flujos/{flujoId}/posicion` | El firmante fija dónde va su firma: `{ numeroPagina, x, y, ancho, alto }`, todo normalizado 0..1 con origen arriba-izquierda (como CSS/canvas) para no depender de a qué resolución se renderizó la página en el navegador. Debe llamarse después de visualizar y antes de firmar — ver `PosicionFirma.Crear` para las validaciones (recuadro dentro de los límites de la página, etc.). |
+| `GET /api/firmas/{id}/documento-visual` | Descarga el documento con el sello visual (nombre del firmante, fecha, código de verificación) dibujado en la posición elegida por cada firmante que ya firmó — ver limitación PAdES abajo. |
+| `GET /api/firmas/pendientes/{firmanteId}` | Lista los flujos de ESE firmante que aún no están `Firmado`/`Rechazado`, a través de todas sus solicitudes — la base del modo masivo. |
+| `POST /api/firmas/lotes/firmar` | Firma varios flujos de un mismo firmante con una sola credencial: `{ operaciones: [{solicitudFirmaId, flujoFirmaId}, ...], pin }`. Cada operación se valida de forma independiente (gate de confianza, existencia); si es elegible, todas se firman en una sola llamada a Criptografía. |
+
+**Limitación deliberada e importante** (ver `IEstampadorVisualDocumento`): el sello visual **no es una firma PAdES real** — no se incrusta un diccionario `/Sig` ni se hace la actualización incremental que preserva intacto el byte-range firmado (ISO 32000-2). Es un sello de cortesía generado aparte con PdfSharpCore (MIT); el hash que se firma criptográficamente siempre es el de los bytes **originales** del documento (ver `Documento.Hash`), nunca el del PDF ya estampado. Solo funciona sobre PDF — otros tipos de contenido se sirven sin cambios.
+
+### 11.2 Por qué el modo masivo firma con una sola credencial
+
+`IProveedorCriptografico.FirmarLoteAsync` tiene una implementación por defecto que firma uno por uno (usada por el proveedor de software, que no tiene costo real de sesión), pero `ProveedorCriptograficoPkcs11` la sobreescribe: abre **un solo** `session.Login()` contra la tarjeta, firma todos los hashes del lote, y recién entonces hace `session.Logout()`. Por eso todas las operaciones de un lote deben pertenecer al **mismo firmante** (la tarjeta física es de una sola persona) — `FirmarLoteHandler` lo valida antes de llamar a Criptografía y falla el lote completo si detecta más de un firmante.
+
+Cada flujo del lote debe haberse **visualizado individualmente** antes de firmar (mismo requisito que el flujo de un solo documento — `FlujoFirma.MarcarFirmado` exige `Estado == Visualizado`), así que firmar en lote es siempre: visualizar cada uno → una sola llamada de firma para todos.
+
+### 11.3 El visor web de referencia
+
+`src/frontend/firma-web/` es un cliente estático sin build (HTML + JS vanilla + [pdf.js](https://mozilla.github.io/pdf.js/) desde CDN) que habla directamente con el Gateway. No es parte de ningún microservicio — se abre aparte:
+
+```powershell
+cd F:\SISTEMAS\rubrica
+python -m http.server 8099 --directory src/frontend/firma-web
+```
+Y abre `http://localhost:8099`. (También funciona abriendo `index.html` directamente con doble clic, pero un servidor local evita restricciones de `file://` en algunos navegadores.)
+
+El Gateway ya tiene una política CORS abierta (`visor-firma-desarrollo`, ver `Program.cs`) exclusivamente para este visor en desarrollo — en producción se restringe al dominio del BFF White Label del tenant.
+
+Flujo en el visor:
+1. **Pestaña 1 (Conexión)**: pide un token demo (mismas credenciales `sgd-demo` del resto del runbook) o acepta uno pegado a mano.
+2. **Pestaña 2 (Firmar un documento)**: pega el `solicitudFirmaId`/`flujoFirmaId` que ya tengas (de crear una solicitud por API, sección 4.3) — el visor renderiza el PDF con pdf.js, deja hacer clic sobre la página para colocar el recuadro de firma (con controles de ancho/alto), guarda esa posición, marca visualizado y firma (con campo de PIN si tu Criptografía usa PKCS#11).
+3. **Pestaña 3 (Firma masiva)**: busca los pendientes del firmante indicado en la pestaña 1, deja seleccionar varios con checkboxes, los visualiza todos, y firma todos los seleccionados con un solo PIN.
+
+Verificado en esta sesión: renderizado de PDF con pdf.js, cambio de pestañas, y el cálculo de coordenadas normalizadas del recuadro de firma (incluido el recorte cuando el recuadro se saldría del borde de la página) — probado sirviendo el visor con un servidor estático local y ejecutando la lógica de posicionamiento directamente en consola del navegador. La prueba end-to-end completa (firmar de verdad desde el visor contra el Gateway) queda para que la ejecutes tú, igual que se hizo con el DNIe en la sección 10.

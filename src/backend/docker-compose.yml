@@ -92,6 +92,15 @@ services:
       context: .
       dockerfile: src/Services/SecureSign.Signature/SecureSign.Signature.Api/Dockerfile
     expose: ["8080"]
+    environment:
+      # Por defecto apunta al Crypto.Api en Docker (proveedor de software).
+      # Para firmar con un token PKCS#11 real (DNIe u otro), corre
+      # Crypto.Api NATIVO en Windows (no se puede en un contenedor Linux) y
+      # sobreescribe esta variable, p. ej. en un archivo .env junto a este
+      # docker-compose.yml: CRIPTOGRAFIA_API_URL=http://host.docker.internal:5003
+      # — ver src/backend/RUNBOOK.md.
+      ServiciosInternos__CriptografiaApiUrl: "${CRIPTOGRAFIA_API_URL:-http://securesign-crypto-api:8080}"
+      ServiciosInternos__CriptografiaAlgoritmo: "${CRIPTOGRAFIA_ALGORITMO:-EcdsaSha256}"
     depends_on:
       securesign-signature-migrate:
         condition: service_completed_successfully
@@ -125,7 +134,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U securesign"]
+      test: ["CMD-SHELL", "pg_isready -U securesign -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 10

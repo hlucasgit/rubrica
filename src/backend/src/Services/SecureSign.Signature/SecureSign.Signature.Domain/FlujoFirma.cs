@@ -15,8 +15,10 @@ public sealed class FlujoFirma : Entity
     public string TokenAccesoUnico { get; private set; } = default!;
     public DateTimeOffset? NotificadoEn { get; private set; }
     public DateTimeOffset? VisualizadoEn { get; private set; }
+    public DateTimeOffset? FirmadoEn { get; private set; }
     public DateTimeOffset? RechazadoEn { get; private set; }
     public string? MotivoRechazo { get; private set; }
+    public PosicionFirma? Posicion { get; private set; }
 
     private FlujoFirma() { }
 
@@ -51,6 +53,22 @@ public sealed class FlujoFirma : Entity
         if (Estado != EstadoFlujoFirma.Visualizado)
             return Result.Fallido("El firmante debe visualizar el documento antes de firmar.");
         Estado = EstadoFlujoFirma.Firmado;
+        FirmadoEn = DateTimeOffset.UtcNow;
+        return Result.Exitoso();
+    }
+
+    /// <summary>
+    /// Fija o cambia dónde debe aparecer la representación visual de la
+    /// firma de este firmante (ver PosicionFirma). Solo tiene sentido antes
+    /// de firmar — una vez firmado, la posición queda fija para que el
+    /// sello visual del documento (IEstampadorVisualDocumento) no cambie
+    /// retroactivamente lo que ya se firmó.
+    /// </summary>
+    public Result EstablecerPosicion(PosicionFirma posicion)
+    {
+        if (Estado is EstadoFlujoFirma.Firmado or EstadoFlujoFirma.Rechazado)
+            return Result.Fallido($"No se puede cambiar la posición de firma en estado {Estado}.");
+        Posicion = posicion;
         return Result.Exitoso();
     }
 

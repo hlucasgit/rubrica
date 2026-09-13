@@ -35,4 +35,15 @@ public sealed class SolicitudFirmaRepositoryEnMemoria : ISolicitudFirmaRepositor
         _solicitudes[solicitud.Id] = solicitud;
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<SolicitudFirma>> ListarPendientesPorFirmanteAsync(Guid tenantId, Guid firmanteUsuarioId, CancellationToken ct = default)
+    {
+        var resultado = _solicitudes.Values
+            .Where(s => s.TenantId == tenantId && s.Flujos.Any(f =>
+                f.FirmanteUsuarioId == firmanteUsuarioId &&
+                f.Estado != EstadoFlujoFirma.Firmado &&
+                f.Estado != EstadoFlujoFirma.Rechazado))
+            .ToList();
+        return Task.FromResult<IReadOnlyList<SolicitudFirma>>(resultado);
+    }
 }

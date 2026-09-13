@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using SecureSign.Signature.Application.Clients;
 using SecureSign.Signature.Application.CrearSolicitudFirma;
+using SecureSign.Signature.Application.Estampado;
 using SecureSign.Signature.Domain;
 using SecureSign.Signature.Infrastructure;
 using SecureSign.Signature.Infrastructure.Clients;
+using SecureSign.Signature.Infrastructure.Estampado;
 using SecureSign.Signature.Infrastructure.Persistence;
 using SecureSign.Shared.Auth;
 
@@ -22,6 +24,7 @@ builder.Services.AddDbContext<SignatureDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 builder.Services.AddScoped<ISolicitudFirmaRepository, SolicitudFirmaRepositoryEfCore>();
 builder.Services.AddSingleton<IGeneradorUrlFirma, GeneradorUrlFirmaWhiteLabel>();
+builder.Services.AddSingleton<IEstampadorVisualDocumento, EstampadorVisualDocumentoPdf>();
 
 // Clientes HTTP hacia los servicios de dominio de los que depende la
 // orquestación de firma (ver docs/01-arquitectura/arquitectura-general.md

@@ -58,7 +58,7 @@ public sealed class FirmarDocumentoHandler(
         if (documento is null) return Result.Fallido<FirmarDocumentoResponse>("El documento asociado ya no existe.");
 
         var referenciaLlave = await criptografia.ObtenerOGenerarLlaveAsync(flujo.FirmanteUsuarioId, ct);
-        var firma = await criptografia.FirmarAsync(referenciaLlave, documento.HashSha256, ct);
+        var firma = await criptografia.FirmarAsync(referenciaLlave, documento.HashSha256, request.PinFirmante, ct);
 
         var confirmacion = solicitud.ConfirmarFirma(request.FlujoFirmaId);
         if (!confirmacion.EsExitoso) return Result.Fallido<FirmarDocumentoResponse>(confirmacion.Error!);

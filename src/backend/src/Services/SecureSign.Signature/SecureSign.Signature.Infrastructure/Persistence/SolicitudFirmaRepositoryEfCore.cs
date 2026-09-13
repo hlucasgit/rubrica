@@ -26,4 +26,13 @@ public sealed class SolicitudFirmaRepositoryEfCore(SignatureDbContext db) : ISol
         db.SolicitudesFirma.Update(solicitud);
         await db.SaveChangesAsync(ct);
     }
+
+    public async Task<IReadOnlyList<SolicitudFirma>> ListarPendientesPorFirmanteAsync(Guid tenantId, Guid firmanteUsuarioId, CancellationToken ct = default)
+        => await db.SolicitudesFirma
+            .Include(s => s.Flujos)
+            .Where(s => s.TenantId == tenantId && s.Flujos.Any(f =>
+                f.FirmanteUsuarioId == firmanteUsuarioId &&
+                f.Estado != EstadoFlujoFirma.Firmado &&
+                f.Estado != EstadoFlujoFirma.Rechazado))
+            .ToListAsync(ct);
 }

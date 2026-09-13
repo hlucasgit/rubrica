@@ -29,6 +29,19 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("publico-sin-auth", p => p.RequireAssertion(_ => true));
 });
 
+// CORS abierto SOLO para el visor de firma estático de este scaffold (ver
+// src/frontend/firma-web), que se abre desde file:// o un servidor estático
+// local en un origen distinto al Gateway. En producción esto se restringe
+// al dominio real del BFF White Label por tenant (ver docs/06-white-label).
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("visor-firma-desarrollo", p => p
+        .AllowAnyOrigin()
+        .AllowAnyMethod()
+        .AllowAnyHeader()
+        .WithExposedHeaders("X-Hash-Documento", "X-Evidencia-Url"));
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -38,6 +51,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("visor-firma-desarrollo");
 app.UseAuthentication();
 app.UseAuthorization();
 

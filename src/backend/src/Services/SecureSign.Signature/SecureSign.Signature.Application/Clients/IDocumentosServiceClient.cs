@@ -2,6 +2,8 @@ namespace SecureSign.Signature.Application.Clients;
 
 public sealed record DocumentoRemoto(Guid IdDocumento, string HashSha256, string Estado);
 
+public sealed record ContenidoDocumentoRemoto(byte[] Contenido, string TipoContenido, string NombreArchivo);
+
 /// <summary>
 /// Contrato hacia el Servicio Documental, consumido por la orquestación del
 /// Servicio de Firma. La implementación HTTP vive en la capa de Infraestructura
@@ -12,4 +14,7 @@ public interface IDocumentosServiceClient
 {
     Task<DocumentoRemoto?> ObtenerAsync(Guid documentoId, CancellationToken ct = default);
     Task MarcarFirmadoAsync(Guid documentoId, CancellationToken ct = default);
+
+    /// <summary>Bytes originales del documento — ver DocumentosController GET /contenido.</summary>
+    Task<ContenidoDocumentoRemoto?> ObtenerContenidoAsync(Guid documentoId, CancellationToken ct = default);
 }
