@@ -509,80 +509,113 @@ Piezas nuevas en el backend:
 
 **Importante**: esta ruta es *aditiva* — el flujo de firma con PIN-por-HTTP de las secciones 4-11 sigue existiendo tal cual, para cuando Crypto.Api sí corre en la misma máquina que el token (tu caso de prueba con el DNIe).
 
-### 12.2 Instalar el Firmador Local
+### 12.2 Arquitectura real: servicio HTTP local (no un protocolo de URL)
+
+La primera versión de esta pieza invocaba el Firmador Local mediante un protocolo de URL propio (`securesign://`, resuelto por Windows). **Se abandonó como mecanismo principal tras una sesión completa de troubleshooting** (ver 12.6) que terminó en un callejón sin salida específico de una máquina — y al revisar de nuevo los manuales de Firma Perú se confirmó que ellos tampoco dependen solo de eso: su `firmaperu.min.js` invoca `startSignature(port, param)`, que en realidad habla con **un servidor local ya corriendo en `http://localhost:port`** — el protocolo/ClickOnce solo se usa para *arrancar* esa app la primera vez, no para cada firma.
+
+El Firmador Local ahora sigue ese mismo patrón directamente: al ejecutarse **sin argumentos**, queda corriendo en segundo plano (ícono en la bandeja del sistema) escuchando en `http://127.0.0.1:48596/` — solo loopback, nunca en la red. El navegador simplemente le hace un `fetch()` normal, sin que Windows tenga que resolver nada:
+
+```
+Navegador (integrador)                    Firmador Local (servicio, ya corriendo)   Gateway SecureSign
+       |  GET /api/firmas/{id}/estado ------------------------------------------------------->|
+       |<---------------------------------------------------------------- documentoId ---------|
+       |  clic "Firmar"                                                                        |
+       |  fetch GET http://127.0.0.1:48596/ping  ------------------->|                          |
+       |<---------------------------------------- { status: "ok" } --|                          |
+       |  fetch POST http://127.0.0.1:48596/firmar                   |                          |
+       |  { gatewayUrl, solicitudId, flujoId, accessToken } -------->|                          |
+       |                                                              |  GET /estado, GET /contenido (hash LOCAL)
+       |                                                              |------------------------->|
+       |                                                              |  VentanaFirma: certificado + PIN (LOCAL)
+       |                                                              |  firma con PKCS#11 (LOCAL)
+       |                                                              |  POST completar-firma-local
+       |                                                              |------------------------->|
+       |<--------------------------------- { ok: true, ... } --------|                          |
+```
+
+Rutas que expone (`ServicioLocal.cs`):
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /ping` | `{ "status": "ok" }` — para que la página detecte si el servicio ya está corriendo antes de intentar firmar. |
+| `POST /firmar` | Cuerpo `{ gatewayUrl, solicitudId, flujoId, accessToken }` (los mismos datos que antes viajaban codificados en la URI). Descarga el documento, calcula el hash, muestra `VentanaFirma`, firma con la tarjeta, y llama a `completar-firma-local` — devuelve `{ ok, mensaje, datos }`. |
+
+Piezas nuevas en el backend (sin cambios frente a la versión anterior — la verificación server-side es la misma):
+
+| Pieza | Qué hace |
+|---|---|
+| `VerificadorFirmaExterna.Verificar` (Signature.Application) | Verifica, con la llave **pública** del certificado recibido, que la firma corresponde al hash — pura criptografía .NET (`RSA.VerifyHash`/`ECDsa.VerifyHash`), sin PKCS#11 ni PIN. |
+| `POST /api/firmas/{id}/flujos/{flujoId}/completar-firma-local` | Recibe `{ firmaBase64, certificadoBase64, algoritmo }`. Recalcula el hash del documento desde el Servicio Documental (nunca confía en un hash ajeno), verifica la firma, y si es válida sigue la MISMA orquestación que `FirmarDocumentoHandler` (gate de confianza, `ConfirmarFirma`, evidencia, marcar documento firmado) — ver `FirmarLocalHandler.cs`. |
+
+**Importante**: esta ruta es *aditiva* — el flujo de firma con PIN-por-HTTP de las secciones 4-11 sigue existiendo tal cual, para cuando Crypto.Api sí corre en la misma máquina que el token (tu caso de prueba con el DNIe).
+
+### 12.3 Instalar el Firmador Local
 
 ```powershell
 cd F:\SISTEMAS\rubrica\src\backend
-dotnet build src/Tools/SecureSign.FirmadorLocal -c Release
+dotnet publish src/Tools/SecureSign.FirmadorLocal -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-firmador-local
 ```
 
-Registra el protocolo `securesign://` en tu usuario de Windows (no requiere administrador):
+Copia el único `.exe` resultante a donde quieras (p. ej. `%LOCALAPPDATA%\SecureSign\FirmadorLocal\`) y ejecútalo **sin argumentos** — queda corriendo con un ícono en la bandeja del sistema ("SecureSign Perú — Firmador Local (activo)"), escuchando en el puerto 48596. Para cerrarlo: clic derecho en el ícono → "Salir". No necesita registrar nada en Windows para este modo — el `--registrar`/`--desinstalar` del protocolo `securesign://` sigue existiendo como respaldo opcional (ver 12.6), no es necesario para el uso normal.
 
-```powershell
-dotnet run --project src/Tools/SecureSign.FirmadorLocal -c Release -- --registrar
-```
+> Para que quede disponible siempre (arranque de sesión), colócalo en la carpeta de inicio de Windows (`shell:startup`) o regístralo como tarea programada — no incluido aquí, es una decisión de despliegue de cada entidad.
 
-Esto escribe en `HKEY_CURRENT_USER\Software\Classes\securesign` apuntando al ejecutable compilado. Reinicia el navegador después de registrar. Para desinstalarlo: `... -- --desinstalar`.
+### 12.4 Integrarlo desde una página web
 
-> Para distribuir el Firmador Local a los usuarios finales de una entidad integrada, se publica con `dotnet publish -c Release --self-contained -r win-x64 -p:PublishSingleFile=true` y se distribuye el único `.exe` resultante — el usuario lo ejecuta una vez con `--registrar` y queda listo.
-
-### 12.3 Integrarlo desde una página web
-
-El visor de referencia (`src/frontend/firma-web`) ya lo integra — pestaña 2, tarjeta "...o firma con tu propio certificado". El código es la integración de referencia para cualquier tercero:
+El visor de referencia (`src/frontend/firma-web/app.js`) ya lo integra. La llamada real, la que cualquier tercero replicaría:
 
 ```javascript
-const parametros = { gatewayUrl, solicitudId, flujoId, accessToken };
-const uri = `securesign://firmar?param=${encodeURIComponent(btoa(JSON.stringify(parametros)))}`;
-window.location.href = uri; // el navegador pregunta una vez si abrir "SecureSign Perú — Firmador Local"
-// luego, sondear GET /api/firmas/{solicitudId}/estado hasta ver "Firmado"
+// 1. Verificar que el servicio esté corriendo en esta PC.
+const activo = await fetch("http://127.0.0.1:48596/ping").then(r => r.ok).catch(() => false);
+if (!activo) { /* pedir al usuario que abra el Firmador Local */ }
+
+// 2. Pedirle que firme — la llamada espera a que el usuario elija certificado
+//    e ingrese su PIN en la ventana que se abre, y devuelve el resultado ya verificado.
+const resultado = await fetch("http://127.0.0.1:48596/firmar", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ gatewayUrl, solicitudId, flujoId, accessToken }),
+}).then(r => r.json());
+// resultado.ok === true si se firmó correctamente.
 ```
 
-### 12.4 Ejecutarlo y probarlo con un DNIe real — verificado en esta sesión
+Sin protocolos de URL, sin `window.location.href`, sin diálogos de "¿abrir esta aplicación?" — un `fetch()` como cualquier otro.
+
+### 12.5 Ejecutarlo y probarlo con un DNIe real — verificado en esta sesión
 
 1. Levanta el stack en Docker (secciones 2/4) — usa el proveedor de software o el PKCS#11 nativo indistintamente, el Firmador Local no depende de cuál esté configurado en `Crypto.Api`, porque **no lo usa** — firma directo con la tarjeta.
-2. Crea una solicitud (sección 4.1-4.6) hasta dejar el flujo en `Visualizado` con índice de confianza suficiente para el `tipoFirma` elegido.
-3. Desde el visor, botón "Abrir Firmador Local y firmar" (o ejecutando el `.exe` directamente pasándole la URI como argumento, ver nota abajo).
-4. Se abre una consola del Firmador Local: lista los certificados no-CA del token conectado, pide elegir uno, pide el PIN (oculto), firma, y muestra "ÉXITO — documento firmado correctamente."
-5. Verificar con `GET /api/validacion/{codigoVerificacionPublico}` (sección 4.9).
+2. Arranca el Firmador Local (12.3) — confirma con `Invoke-RestMethod http://127.0.0.1:48596/ping` que responde `{ status: "ok" }`.
+3. Crea una solicitud (sección 4.1-4.6) hasta dejar el flujo en `Visualizado` con índice de confianza suficiente para el `tipoFirma` elegido.
+4. Desde el visor, botón "Abrir Firmador Local y firmar".
+5. Se abre `VentanaFirma`: nombre del documento, hash, lista de certificados no-CA del token conectado, y un campo de PIN enmascarado. Al confirmar, firma y muestra un diálogo "El documento «...» se firmó correctamente."
+6. Verificar con `GET /api/validacion/{codigoVerificacionPublico}` (sección 4.9).
 
-**Ejecutado tal cual con un DNIe real en esta sesión**, con esta salida real de la consola:
-```
-Solicitud de firma: 17433a90-dc97-42ab-bda2-f2de0be625a3
-Consultando la solicitud...
-Descargando el documento a firmar...
-  608 bytes — SHA-256: F958A45A83DFB846B4DC1ACEE54A60E2CE405CB254B3DD7F8A6A7DAB54E9BB9A
+**Ejecutado tal cual con un DNIe real en esta sesión, disparado con un clic real desde Chrome** (no desde PowerShell, no desde la app directa) — sin ningún diálogo de "elegir aplicación" de por medio. Confirmado por los logs de `securesign-signature-api`: **cero llamadas a Criptografía** durante la operación (prueba de que pasó por `completar-firma-local`/`VerificadorFirmaExterna`, no por el PIN-por-HTTP de las secciones 4-11); `GET /api/validacion/{codigo}` devolvió `documentoValido: true`.
 
-Certificados disponibles para firmar:
-  [0] LUCAS FERNANDEZ Henry Alberto AUT 41342572 hard — CN=..., OU=EREP_PN_RENIEC_46801646, ...
-  [1] LUCAS FERNANDEZ Henry Alberto FIR 41342572 hard — CN=..., OU=EREP_PN_RENIEC_46801647, ...
-Elige el número del certificado (0-1): 1
-PIN de la tarjeta/token: ******
-Firmando en esta máquina (el PIN no sale de aquí)...
-Enviando el resultado a SecureSign...
+### 12.6 Historia: por qué se abandonó `securesign://` como mecanismo principal
 
-ÉXITO — documento firmado correctamente.
-{"estadoSolicitud":"Firmado","algoritmoFirma":"RsaSha256","firmaBase64":"..."}
-```
+Se mantiene como referencia porque documenta un troubleshooting real y exhaustivo, y porque el protocolo sigue existiendo como respaldo (`--registrar`/`--desinstalar`, y el modo heredado del `.exe` invocado con una URI como argumento).
 
-**Actualizado tras esta prueba**: la selección de certificado y el PIN dejaron de pedirse por consola — ahora se muestran en una ventana real (`VentanaFirma.cs`, WinForms, sin dependencias nuevas) con el nombre del documento, su hash, una lista de certificados y un campo de PIN enmascarado, terminando en un cuadro de diálogo de confirmación ("El documento «...» se firmó correctamente."). La consola sigue imprimiendo el mismo detalle técnico por transparencia, pero ya no es donde se interactúa. Reprobado end-to-end con esta versión con el mismo DNIe real: misma solicitud firmada, misma validación pública `documentoValido: true`.
-Confirmado además por los logs de `securesign-signature-api`: **cero llamadas a Criptografía** durante esta operación (a diferencia de las secciones 4-11) — prueba de que el flujo realmente pasó por `completar-firma-local`/`VerificadorFirmaExterna` y no por el camino con PIN-por-HTTP. `GET /api/validacion/{codigo}` confirmó `documentoValido: true`.
+En la máquina de prueba, ni `Start-Process` desde PowerShell ni un clic real disparando `window.location.href` (ni siquiera un `<a href>` sintético) desde el visor lograron invocar el Firmador Local por protocolo — el navegador mostraba la navegación como "(canceled)" en las herramientas de desarrollo, sin siquiera preguntarle a Windows. Se descartó, en este orden, cada causa plausible:
 
-> **Nota sobre la resolución del protocolo `securesign://` — diagnóstico completo**: en la máquina de prueba, ni `Start-Process` desde PowerShell ni un clic real disparando `window.location.href` desde el visor lograron invocar el Firmador Local ("El equipo no tiene una aplicación que pueda abrir este vínculo"), pese a que el registro estaba objetivamente correcto — verificado tres veces con `reg query` en `HKEY_CURRENT_USER\Software\Classes\securesign` y su vista fusionada `HKEY_CLASSES_ROOT\securesign`, y comparado clave por clave contra el registro real de `vscode://` (Visual Studio Code) en la misma máquina, que es **estructuralmente idéntico** al nuestro (mismas claves `shell\open\command`, mismo formato, sin nada adicional) y sí funciona con `Start-Process`. Se descartó también: caché de Explorer (se reinició explorer.exe sin efecto), ubicación del ejecutable (se reinstaló en `%LOCALAPPDATA%\SecureSign\FirmadorLocal`, como una app real, sin efecto), Mark-of-the-Web (sin stream `Zone.Identifier`), y entradas de `UserChoice`/`UrlAssociations` obsoletas (no había ninguna).
->
-> **Prueba definitiva de que el registro SÍ funciona**: `rundll32.exe url.dll,FileProtocolHandler "securesign://firmar?param=..."` lanza el Firmador Local correctamente — este es el mecanismo de resolución de protocolos "clásico" de Windows, que lee la misma estructura de registro directamente. Esto aísla el problema a la capa "moderna" de resolución de apps (la que respalda el diálogo "Elegir una aplicación" y que usan tanto `ShellExecuteEx` desde PowerShell como la navegación de un navegador).
->
-> **Un reinicio completo de Windows NO lo corrigió** (se probó explícitamente en esta sesión), descartando que fuera una caché de sesión. Se investigaron además, sin encontrar la causa: Smart App Control (`VerifiedAndReputablePolicyState = 0`, apagado), directivas de grupo de Explorer/`OpenWith` (ninguna configurada), políticas de SmartScreen (ninguna), y declaraciones `Capabilities`/`RegisteredApplications` (`vscode://`, que sí funciona, tampoco las tiene — se registra exactamente igual que nosotros, por `shell\open\command` simple). La hipótesis más plausible que queda, sin poder confirmarla en esta máquina, es un antivirus/EDR interceptando silenciosamente la resolución de protocolos para ejecutables **sin firma Authenticode** (`code.exe` de VS Code sí está firmado por Microsoft; `SecureSignFirmadorLocal.exe` no está firmado) — este tipo de bloqueo no deja rastro en el registro ni en las directivas estándar de Windows, coincide con que el mecanismo de bajo nivel (`rundll32`) sí funcione, y es exactamente lo que firmar el ejecutable resolvería.
->
-> **Workarounds verificados y funcionales mientras tanto** (ambos ejecutan exactamente la misma lógica del Firmador Local, sin PIN por HTTP):
-> - Ejecutar el `.exe` directamente pasándole la URI completa como argumento: `SecureSignFirmadorLocal.exe "securesign://firmar?param=..."`.
-> - `rundll32.exe url.dll,FileProtocolHandler "securesign://firmar?param=..."`.
->
-> Para una integración de producción real, si este síntoma se repite en las máquinas de los usuarios finales, el primer paso de soporte es pedirles reiniciar Windows; si persiste, firmar el ejecutable con un certificado de Authenticode reconocido reduce la probabilidad de que capas de seguridad adicionales (SmartScreen y similares) interfieran con la resolución.
+- **Registro incorrecto**: descartado — verificado tres veces con `reg query`, comparado clave por clave contra el registro real (y funcional) de `vscode://` en la misma máquina, estructuralmente idéntico al nuestro.
+- **Caché de Explorer**: descartado — reiniciar `explorer.exe` no tuvo efecto.
+- **Ubicación del ejecutable**: descartado — se reinstaló en `%LOCALAPPDATA%\SecureSign\FirmadorLocal` como una app real, sin efecto.
+- **Mark-of-the-Web / `UserChoice` obsoleto**: descartado — no había ninguno.
+- **Caché del resolutor "moderno" de apps de Windows**: parcialmente descartado — un **reinicio completo de Windows** no lo corrigió.
+- **Smart App Control, AppLocker, directivas de grupo de Explorer/`OpenWith`, políticas de SmartScreen**: descartadas — ninguna estaba configurada en la máquina.
+- **Declaración `Capabilities`/`RegisteredApplications`**: descartada — `vscode://`, que sí funciona, tampoco la tiene.
+- **Antivirus (Bitdefender)**: descartado — desactivar su protección en tiempo real no cambió el resultado.
+- **Extensiones del navegador**: descartado — modo incógnito (que las desactiva) se comportó igual.
+- **Política empresarial de Chrome**: descartado — `chrome://policy` solo mostraba una política de red local sin relación (`LocalNetworkAccessAllowedForUrls`), y el equipo resultó ser un dispositivo gestionado por una organización (aparece `mineduperu` en el valor), pero ninguna política relacionada con protocolos.
 
-### 12.5 Limitaciones deliberadas
+Lo único que sí funcionaba de forma consistente: `rundll32.exe url.dll,FileProtocolHandler "securesign://..."` — el mecanismo de resolución de protocolos "clásico" de Windows, que lee el registro directamente sin pasar por la capa que usan `ShellExecuteEx`/los navegadores. Esto prueba que el registro en sí siempre estuvo bien, y aísla el problema a esa capa específica — nunca se identificó la causa raíz exacta en esta máquina puntual. El servicio HTTP local (12.2) evita el problema por completo en vez de seguir depurándolo, y es además una arquitectura más simple y más parecida a lo que hace la propia Plataforma FIRMA PERÚ.
 
-- Solo Windows por ahora (igual que `ProveedorCriptograficoPkcs11`) — el protocolo de URL y el registro vía `Microsoft.Win32.Registry` son específicos de Windows; Linux/macOS requerirían su propio mecanismo de registro de protocolo (`xdg-mime`/`Info.plist` respectivamente), no implementado.
-- La resolución del protocolo `securesign://` por parte de Windows/el navegador no es 100% confiable en toda máquina (ver nota arriba) — el mecanismo de invocación es el punto menos maduro de esta pieza, no la lógica de firma en sí (esa sí quedó verificada de punta a punta, incluida la ventana gráfica).
-- La ventana de selección de certificado (`VentanaFirma.cs`) es funcional pero deliberadamente simple (WinForms, sin theming) — no imita el estilo visual de ninguna plataforma en particular.
+### 12.7 Limitaciones deliberadas
+
+- Solo Windows por ahora (igual que `ProveedorCriptograficoPkcs11`).
+- El servicio debe estar corriendo de antemano en la PC del firmante — si no lo está, el visor lo detecta (`/ping` falla) y le pide al usuario abrirlo, pero no lo arranca automáticamente (ver nota sobre inicio automático en 12.3).
+- CORS del servicio local está abierto a cualquier origen (`Access-Control-Allow-Origin: *`) — deliberado, porque cualquier página de cualquier entidad integrada debe poder llamarlo, igual que Firma Perú no restringe el origen de quien invoca su servicio local; la superficie de riesgo real es la misma que ya existe para cualquier servicio en loopback (solo alcanzable desde la propia máquina).
+- La ventana de selección de certificado (`VentanaFirma.cs`) es funcional pero deliberadamente simple (WinForms, sin theming).
 - No valida la cadena de certificación (CRL/OCSP/TSL) del certificado recibido, solo la operación criptográfica — igual que la limitación ya documentada en `ProveedorCriptograficoPkcs11`.
-- El `accessToken` viaja como parte de la URL `securesign://...` (mismo enfoque que usa el propio Firma Perú con su `token` en el JSON de parámetros) — queda en la línea de comandos con la que el sistema operativo lanza el proceso, visible para otros procesos con privilegios para inspeccionarla.
+- Sin firma Authenticode en el `.exe` — recomendable antes de distribuirlo a usuarios finales, para reducir fricción con antivirus/SmartScreen en general (aunque, como se documentó en 12.6, no resultó ser la causa del problema de protocolo en esta máquina).

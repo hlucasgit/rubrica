@@ -1,0 +1,159 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Windows.Forms;
+
+namespace SecureSign.FirmadorLocal;
+
+/// <summary>
+/// El Firmador Local corriendo como servicio: un ícono en la bandeja del
+/// sistema + un <see cref="HttpListener"/> en <c>http://127.0.0.1:PUERTO/</c>
+/// (loopback únicamente — nunca escucha en la red). El visor (o cualquier
+/// integrador) simplemente le hace un <c>fetch()</c> normal desde
+/// JavaScript, exactamente como hace la Plataforma FIRMA PERÚ con su
+/// <c>startSignature(port, param)</c> — ver comentario de <see cref="Program"/>.
+///
+/// Rutas:
+/// - GET  /ping    → { "status": "ok" } — para que el visor detecte si el
+///   servicio ya está corriendo antes de intentar firmar.
+/// - POST /firmar  → recibe los mismos parámetros que antes viajaban en la
+///   URI (gatewayUrl, solicitudId, flujoId, accessToken) como cuerpo JSON,
+///   muestra <see cref="VentanaFirma"/>, firma, y devuelve el resultado.
+///
+/// La ventana de firma se muestra en el hilo de UI de este
+/// <see cref="ApplicationContext"/> (vía <see cref="Control.Invoke(Delegate)"/>)
+/// aunque la petición HTTP llegue en un hilo del pool — WinForms exige que
+/// toda UI se cree y manipule desde un único hilo STA.
+/// </summary>
+internal sealed class ServicioLocal : ApplicationContext
+{
+    private readonly Form _hiloUi;
+    private readonly NotifyIcon _icono;
+    private readonly HttpListener _listener = new();
+    private static readonly JsonSerializerOptions OpcionesJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    public ServicioLocal()
+    {
+        // Formulario invisible: solo existe para tener un Handle de Win32 al
+        // que hacerle Invoke desde el hilo del HttpListener.
+        _hiloUi = new Form { ShowInTaskbar = false, Opacity = 0, FormBorderStyle = FormBorderStyle.None, StartPosition = FormStartPosition.Manual, Location = new System.Drawing.Point(-2000, -2000) };
+        _hiloUi.Load += (_, _) => _hiloUi.Hide();
+        _hiloUi.Show();
+
+        _icono = new NotifyIcon
+        {
+            Icon = System.Drawing.SystemIcons.Shield,
+            Visible = true,
+            Text = "SecureSign Perú — Firmador Local (activo)",
+        };
+        var menu = new ContextMenuStrip();
+        menu.Items.Add($"Escuchando en http://127.0.0.1:{Program.PuertoServicioLocal}/", null, (_, _) => { }).Enabled = false;
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Salir", null, (_, _) => Salir());
+        _icono.ContextMenuStrip = menu;
+        _icono.DoubleClick += (_, _) =>
+            MessageBox.Show(
+                $"El Firmador Local está activo, escuchando en http://127.0.0.1:{Program.PuertoServicioLocal}/.\n\nPuedes cerrar esta app desde el menú del ícono (clic derecho → Salir).",
+                "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        try
+        {
+            _listener.Prefixes.Add($"http://127.0.0.1:{Program.PuertoServicioLocal}/");
+            _listener.Start();
+        }
+        catch (HttpListenerException ex)
+        {
+            MessageBox.Show(
+                $"No se pudo iniciar el Firmador Local en el puerto {Program.PuertoServicioLocal} — ¿ya hay una instancia corriendo?\n\n{ex.Message}",
+                "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Salir();
+            return;
+        }
+
+        Console.WriteLine($"Firmador Local activo — escuchando en http://127.0.0.1:{Program.PuertoServicioLocal}/");
+        _ = EscucharAsync();
+    }
+
+    private async Task EscucharAsync()
+    {
+        while (_listener.IsListening)
+        {
+            HttpListenerContext contexto;
+            try
+            {
+                contexto = await _listener.GetContextAsync();
+            }
+            catch (Exception)
+            {
+                break; // el listener se detuvo (Salir()) — fin del ciclo.
+            }
+
+            _ = Task.Run(() => AtenderPeticionAsync(contexto));
+        }
+    }
+
+    private async Task AtenderPeticionAsync(HttpListenerContext contexto)
+    {
+        var respuesta = contexto.Response;
+        // CORS abierto: es un servicio 100% local (loopback) pensado para
+        // que CUALQUIER página del integrador pueda llamarlo, igual que
+        // Firma Perú no restringe el origen de quien llama a su servicio local.
+        respuesta.Headers["Access-Control-Allow-Origin"] = "*";
+        respuesta.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
+        respuesta.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+
+        try
+        {
+            if (contexto.Request.HttpMethod == "OPTIONS")
+            {
+                respuesta.StatusCode = 204;
+                respuesta.Close();
+                return;
+            }
+
+            var ruta = contexto.Request.Url?.AbsolutePath ?? string.Empty;
+
+            if (ruta == "/ping" && contexto.Request.HttpMethod == "GET")
+            {
+                await ResponderJsonAsync(respuesta, 200, new { status = "ok" });
+                return;
+            }
+
+            if (ruta == "/firmar" && contexto.Request.HttpMethod == "POST")
+            {
+                using var lector = new StreamReader(contexto.Request.InputStream, Encoding.UTF8);
+                var cuerpoJson = await lector.ReadToEndAsync();
+                var parametros = Program.ParsearParametrosDesdeCuerpoJson(cuerpoJson);
+
+                var resultado = await Program.EjecutarFirmaAsync(parametros, _hiloUi);
+                await ResponderJsonAsync(respuesta, resultado.Ok ? 200 : 400, resultado);
+                return;
+            }
+
+            await ResponderJsonAsync(respuesta, 404, new { error = "Ruta no encontrada." });
+        }
+        catch (Exception ex)
+        {
+            try { await ResponderJsonAsync(respuesta, 500, new { error = ex.Message }); }
+            catch { /* la conexión ya pudo haberse cerrado del otro lado */ }
+        }
+    }
+
+    private static async Task ResponderJsonAsync(HttpListenerResponse respuesta, int codigoEstado, object cuerpo)
+    {
+        respuesta.StatusCode = codigoEstado;
+        respuesta.ContentType = "application/json; charset=utf-8";
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(cuerpo, OpcionesJson);
+        respuesta.ContentLength64 = bytes.Length;
+        await respuesta.OutputStream.WriteAsync(bytes);
+        respuesta.Close();
+    }
+
+    private void Salir()
+    {
+        _icono.Visible = false;
+        try { _listener.Stop(); } catch { /* ya pudo estar detenido */ }
+        _hiloUi.Close();
+        ExitThread();
+    }
+}

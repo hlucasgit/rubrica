@@ -330,49 +330,58 @@ document.getElementById("btnVerValidacion").addEventListener("click", async () =
   }
 });
 
-// ---------- Firmador Local (securesign://) ----------
+// ---------- Firmador Local (servicio HTTP local, ver RUNBOOK.md sección 12) ----------
+//
+// El Firmador Local, una vez iniciado, escucha en este puerto — igual que
+// startSignature(port, param) de la propia Plataforma FIRMA PERÚ. Se le
+// habla con fetch() normal, sin depender de que Windows resuelva ningún
+// protocolo de URL personalizado (esa vía existe como respaldo, ver más
+// abajo, pero resultó poco confiable en pruebas — ver RUNBOOK.md).
+const URL_SERVICIO_LOCAL = "http://127.0.0.1:48596";
 
 document.getElementById("btnFirmarConFirmadorLocal").addEventListener("click", async () => {
   const { solicitudId, flujoId } = estado.individual;
-  const parametros = {
-    gatewayUrl: estado.gatewayUrl,
-    solicitudId,
-    flujoId,
-    accessToken: estado.token,
-  };
-  const base64 = btoa(JSON.stringify(parametros));
-  const uri = `securesign://firmar?param=${encodeURIComponent(base64)}`;
+  const parametros = { gatewayUrl: estado.gatewayUrl, solicitudId, flujoId, accessToken: estado.token };
+
+  const servicioActivo = await estaActivoElFirmadorLocal();
+  if (!servicioActivo) {
+    mostrarMensaje("mensajeFirmadorLocal",
+      "No se detecta el Firmador Local corriendo en esta PC. Ábrelo (doble clic al .exe instalado) y vuelve a intentar — queda con un ícono en la bandeja del sistema mientras esté activo.", "error");
+    return;
+  }
 
   mostrarMensaje("mensajeFirmadorLocal",
-    "Abriendo el Firmador Local... revisa la ventana de consola que se abrió para elegir tu certificado e ingresar tu PIN.", "info");
+    "Firmador Local detectado — revisa la ventana que se abrió para elegir tu certificado e ingresar tu PIN.", "info");
 
-  window.location.href = uri;
+  try {
+    const respuesta = await fetch(`${URL_SERVICIO_LOCAL}/firmar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parametros),
+    });
+    const resultado = await respuesta.json();
 
-  esperarFirmaDelFirmadorLocal(solicitudId, flujoId);
+    if (resultado.ok) {
+      mostrarMensaje("mensajeFirmadorLocal", "El Firmador Local completó la firma correctamente.", "ok");
+      document.getElementById("accionesPostFirma").style.display = "block";
+    } else {
+      mostrarMensaje("mensajeFirmadorLocal", `El Firmador Local no pudo firmar: ${resultado.mensaje || resultado.error}`, "error");
+    }
+  } catch (e) {
+    mostrarMensaje("mensajeFirmadorLocal", `Error al hablar con el Firmador Local: ${e.message}`, "error");
+  }
 });
 
-async function esperarFirmaDelFirmadorLocal(solicitudId, flujoId) {
-  const limiteIntentos = 60; // ~3 minutos a 3s por intento
-  for (let intento = 0; intento < limiteIntentos; intento++) {
-    await new Promise((r) => setTimeout(r, 3000));
-    try {
-      const detalle = await apiJson(`/api/firmas/${solicitudId}/estado`);
-      const flujo = detalle.firmantes.find((f) => f.flujoFirmaId === flujoId);
-      if (flujo?.estado === "Firmado") {
-        mostrarMensaje("mensajeFirmadorLocal", "El Firmador Local completó la firma correctamente.", "ok");
-        document.getElementById("accionesPostFirma").style.display = "block";
-        return;
-      }
-      if (flujo?.estado === "Rechazado") {
-        mostrarMensaje("mensajeFirmadorLocal", "El flujo fue rechazado.", "error");
-        return;
-      }
-    } catch {
-      // Sigue esperando — un error puntual de red no debe detener el sondeo.
-    }
+async function estaActivoElFirmadorLocal() {
+  try {
+    const controlador = new AbortController();
+    const limite = setTimeout(() => controlador.abort(), 1500);
+    const respuesta = await fetch(`${URL_SERVICIO_LOCAL}/ping`, { signal: controlador.signal });
+    clearTimeout(limite);
+    return respuesta.ok;
+  } catch {
+    return false;
   }
-  mostrarMensaje("mensajeFirmadorLocal",
-    "No se detectó la firma todavía. Si el Firmador Local mostró un error, revisa su consola; si no se abrió, confirma que esté instalado (RUNBOOK.md sección 12).", "error");
 }
 
 // ---------- firma masiva ----------

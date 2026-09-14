@@ -12,47 +12,54 @@ using Net.Pkcs11Interop.HighLevelAPI;
 namespace SecureSign.FirmadorLocal;
 
 /// <summary>
-/// Firmador Local de SecureSign Perú — el equivalente a "FirmadorClienteWeb"
+/// Firmador Local de SecureSign Perú — el equivalente al "FirmadorClienteWeb"
 /// de Firma Perú, pero como un único ejecutable .NET autocontenido (sin
-/// Java, sin ClickOnce, sin plugins de navegador) invocado vía el protocolo
-/// de URL <c>securesign://</c>.
+/// Java, sin ClickOnce, sin plugins de navegador).
 ///
-/// Diseño clave: el PIN de la tarjeta NUNCA viaja por la red — ni siquiera
-/// hacia el propio Servicio Criptográfico de SecureSign. Este proceso:
+/// MODO PRINCIPAL — servicio local: al ejecutarse sin argumentos, queda
+/// corriendo en segundo plano (ícono en la bandeja) escuchando peticiones
+/// HTTP en <c>http://127.0.0.1:48596</c>. El navegador simplemente hace un
+/// <c>fetch()</c> normal a ese puerto — igual que hace la propia Plataforma
+/// FIRMA PERÚ con su <c>startSignature(port, param)</c> — sin depender en
+/// absoluto de que Windows resuelva ningún protocolo de URL personalizado
+/// (ver ServicioLocal.cs y la nota de troubleshooting en RUNBOOK.md sección
+/// 12, donde esa resolución resultó ser poco confiable).
+///
+/// MODO HEREDADO — invocación por <c>securesign://</c>: se conserva como
+/// alternativa/respaldo (ver RUNBOOK.md), útil por ejemplo con
+/// <c>rundll32.exe url.dll,FileProtocolHandler</c>.
+///
+/// Diseño clave, igual en ambos modos: el PIN de la tarjeta NUNCA viaja por
+/// la red — ni siquiera hacia el propio Servicio Criptográfico de
+/// SecureSign. Este proceso:
 /// 1. Descarga el documento original directamente desde el Gateway.
 /// 2. Calcula su hash SHA-256 EN ESTA MÁQUINA (nunca confía en un hash que
 ///    le pasen — así nunca firma "a ciegas" un hash de origen desconocido).
 /// 3. Firma ese hash con la tarjeta/token PKCS#11 conectado localmente,
 ///    mostrando una ventana (ver <see cref="VentanaFirma"/>) para elegir el
-///    certificado e ingresar el PIN — no un prompt de consola.
+///    certificado e ingresar el PIN.
 /// 4. Envía de vuelta SOLO la firma resultante y el certificado público —
 ///    ver SecureSign.Signature.Application.FirmarLocal.VerificadorFirmaExterna,
 ///    que verifica esa firma con la llave PÚBLICA del certificado (una
 ///    operación que no requiere PIN ni PKCS#11).
-///
-/// Ver docs/RUNBOOK.md sección 12 para el flujo de instalación e integración
-/// completo, y limitaciones deliberadas (solo Windows, un token a la vez,
-/// selección de certificado por índice en consola).
 /// </summary>
 internal static class Program
 {
+    internal const int PuertoServicioLocal = 48596;
+
     private static readonly byte[] DigestInfoPrefijoSha256 =
         Convert.FromHexString("3031300D060960864801650304020105000420");
 
     [STAThread]
     private static async Task<int> Main(string[] args)
     {
-        Console.Title = "SecureSign Perú — Firmador Local";
-        Console.WriteLine("=== SecureSign Perú — Firmador Local ===");
-        Console.WriteLine();
-
-        if (args.Length == 0 || args[0] == "--registrar")
+        if (args.Length > 0 && args[0] == "--registrar")
         {
             RegistrarProtocolo();
             return 0;
         }
 
-        if (args[0] == "--desinstalar")
+        if (args.Length > 0 && args[0] == "--desinstalar")
         {
             DesinstalarProtocolo();
             return 0;
@@ -61,21 +68,33 @@ internal static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        try
+        if (args.Length > 0 && args[0].StartsWith("securesign://", StringComparison.OrdinalIgnoreCase))
         {
-            await ProcesarInvocacionAsync(args[0]);
-            return 0;
-        }
-        catch (Exception ex)
-        {
+            Console.Title = "SecureSign Perú — Firmador Local";
+            Console.WriteLine("=== SecureSign Perú — Firmador Local (modo heredado, securesign://) ===");
             Console.WriteLine();
-            Console.WriteLine($"ERROR: {ex.Message}");
-            MessageBox.Show(ex.Message, "SecureSign Perú — Error al firmar", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return 1;
+            try
+            {
+                var parametros = ParsearParametrosDesdeUri(args[0]);
+                var resultado = await EjecutarFirmaAsync(parametros, hiloUi: null);
+                Console.WriteLine(resultado.Mensaje);
+                return resultado.Ok ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ERROR: {ex.Message}");
+                MessageBox.Show(ex.Message, "SecureSign Perú — Error al firmar", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
         }
+
+        // Modo principal: servicio local persistente (ver ServicioLocal.cs).
+        using var servicio = new ServicioLocal();
+        Application.Run(servicio);
+        return 0;
     }
 
-    // ---------- registro del protocolo securesign:// ----------
+    // ---------- registro del protocolo securesign:// (modo heredado) ----------
 
     private static void RegistrarProtocolo()
     {
@@ -105,70 +124,13 @@ internal static class Program
         Console.WriteLine("Protocolo securesign:// eliminado del registro de este usuario.");
     }
 
-    // ---------- flujo de firma ----------
+    // ---------- flujo de firma (compartido entre el servicio local y el modo heredado) ----------
 
-    private sealed record ParametrosFirma(string GatewayUrl, string SolicitudId, string FlujoId, string AccessToken);
+    internal sealed record ParametrosFirma(string GatewayUrl, string SolicitudId, string FlujoId, string AccessToken);
 
-    private static async Task ProcesarInvocacionAsync(string uriCompleta)
-    {
-        var parametros = ParsearParametros(uriCompleta);
+    internal sealed record ResultadoFirma(bool Ok, string Mensaje, JsonElement? Datos);
 
-        using var http = new HttpClient { BaseAddress = new Uri(parametros.GatewayUrl) };
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", parametros.AccessToken);
-
-        Console.WriteLine($"Solicitud de firma: {parametros.SolicitudId}");
-        Console.WriteLine("Consultando la solicitud...");
-        var estado = await http.GetFromJsonAsync<JsonElement>($"/api/firmas/{parametros.SolicitudId}/estado");
-        var documentoId = estado.GetProperty("documentoId").GetGuid();
-
-        Console.WriteLine("Descargando el documento a firmar...");
-        var respuestaDocumento = await http.GetAsync($"/api/documentos/{documentoId}/contenido");
-        respuestaDocumento.EnsureSuccessStatusCode();
-        var contenido = await respuestaDocumento.Content.ReadAsByteArrayAsync();
-        var nombreArchivo = respuestaDocumento.Content.Headers.ContentDisposition?.FileNameStar
-            ?? respuestaDocumento.Content.Headers.ContentDisposition?.FileName
-            ?? documentoId.ToString();
-        var hash = SHA256.HashData(contenido);
-        Console.WriteLine($"  {contenido.Length} bytes — SHA-256: {Convert.ToHexString(hash)}");
-
-        var candidatos = EnumerarCertificados();
-
-        Console.WriteLine("Mostrando ventana de firma — elige el certificado e ingresa tu PIN ahí...");
-        using var ventana = new VentanaFirma(nombreArchivo, contenido.Length, Convert.ToHexString(hash), candidatos.Select(c => c.Descripcion).ToList());
-        if (ventana.ShowDialog() != DialogResult.OK || ventana.IndiceCertificadoElegido < 0)
-        {
-            Console.WriteLine("Operación cancelada por el usuario.");
-            return;
-        }
-
-        var elegido = candidatos[ventana.IndiceCertificadoElegido];
-        var pin = ventana.Pin;
-
-        Console.WriteLine("Firmando en esta máquina (el PIN no sale de aquí)...");
-        var firma = FirmarConTarjeta(elegido.SlotId, elegido.CkaId, hash, pin);
-        pin = string.Empty; // no persistir el PIN en memoria más de lo necesario
-
-        Console.WriteLine("Enviando el resultado a SecureSign...");
-        var cuerpo = new
-        {
-            firmaBase64 = Convert.ToBase64String(firma),
-            certificadoBase64 = Convert.ToBase64String(elegido.CertDer),
-            algoritmo = "RsaSha256",
-        };
-        var respuesta = await http.PostAsJsonAsync(
-            $"/api/firmas/{parametros.SolicitudId}/flujos/{parametros.FlujoId}/completar-firma-local", cuerpo);
-        var textoRespuesta = await respuesta.Content.ReadAsStringAsync();
-
-        if (!respuesta.IsSuccessStatusCode)
-            throw new InvalidOperationException($"SecureSign rechazó el resultado (HTTP {(int)respuesta.StatusCode}): {textoRespuesta}");
-
-        Console.WriteLine();
-        Console.WriteLine("ÉXITO — documento firmado correctamente.");
-        Console.WriteLine(textoRespuesta);
-        MessageBox.Show($"El documento \"{nombreArchivo}\" se firmó correctamente.", "SecureSign Perú", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
-    private static ParametrosFirma ParsearParametros(string uriCompleta)
+    internal static ParametrosFirma ParsearParametrosDesdeUri(string uriCompleta)
     {
         var uri = new Uri(uriCompleta);
         var query = uri.Query.TrimStart('?');
@@ -180,13 +142,86 @@ internal static class Program
             ?? throw new ArgumentException("La URI de invocación no trae el parámetro 'param'.");
 
         var json = Convert.FromBase64String(Uri.UnescapeDataString(valorParam));
-        var doc = JsonSerializer.Deserialize<JsonElement>(json);
+        return ParametrosDesdeJson(JsonSerializer.Deserialize<JsonElement>(json));
+    }
 
-        return new ParametrosFirma(
-            doc.GetProperty("gatewayUrl").GetString()!,
-            doc.GetProperty("solicitudId").GetString()!,
-            doc.GetProperty("flujoId").GetString()!,
-            doc.GetProperty("accessToken").GetString()!);
+    internal static ParametrosFirma ParsearParametrosDesdeCuerpoJson(string json) =>
+        ParametrosDesdeJson(JsonSerializer.Deserialize<JsonElement>(json));
+
+    private static ParametrosFirma ParametrosDesdeJson(JsonElement doc) => new(
+        doc.GetProperty("gatewayUrl").GetString()!,
+        doc.GetProperty("solicitudId").GetString()!,
+        doc.GetProperty("flujoId").GetString()!,
+        doc.GetProperty("accessToken").GetString()!);
+
+    /// <param name="hiloUi">
+    /// Formulario cuyo Handle se usa para <c>Invoke</c> la ventana de firma
+    /// en el hilo de UI correcto — necesario cuando esta operación se lanza
+    /// desde el hilo en segundo plano del servicio HTTP (ver ServicioLocal).
+    /// Si es <c>null</c>, se asume que ya se está en el hilo de UI (modo
+    /// heredado por consola, de un solo uso).
+    /// </param>
+    internal static async Task<ResultadoFirma> EjecutarFirmaAsync(ParametrosFirma parametros, Form? hiloUi)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(parametros.GatewayUrl) };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", parametros.AccessToken);
+
+        var estado = await http.GetFromJsonAsync<JsonElement>($"/api/firmas/{parametros.SolicitudId}/estado");
+        var documentoId = estado.GetProperty("documentoId").GetGuid();
+
+        var respuestaDocumento = await http.GetAsync($"/api/documentos/{documentoId}/contenido");
+        respuestaDocumento.EnsureSuccessStatusCode();
+        var contenido = await respuestaDocumento.Content.ReadAsByteArrayAsync();
+        var nombreArchivo = respuestaDocumento.Content.Headers.ContentDisposition?.FileNameStar
+            ?? respuestaDocumento.Content.Headers.ContentDisposition?.FileName
+            ?? documentoId.ToString();
+        var hash = SHA256.HashData(contenido);
+
+        var candidatos = EnumerarCertificados();
+
+        int indiceElegido = -1;
+        string pin = string.Empty;
+        void MostrarVentana()
+        {
+            using var ventana = new VentanaFirma(nombreArchivo, contenido.Length, Convert.ToHexString(hash), candidatos.Select(c => c.Descripcion).ToList());
+            if (ventana.ShowDialog() == DialogResult.OK)
+            {
+                indiceElegido = ventana.IndiceCertificadoElegido;
+                pin = ventana.Pin;
+            }
+        }
+
+        if (hiloUi is not null) hiloUi.Invoke(MostrarVentana);
+        else MostrarVentana();
+
+        if (indiceElegido < 0 || indiceElegido >= candidatos.Count)
+            return new ResultadoFirma(false, "Operación cancelada por el usuario.", null);
+
+        var elegido = candidatos[indiceElegido];
+
+        var firma = FirmarConTarjeta(elegido.SlotId, elegido.CkaId, hash, pin);
+        pin = string.Empty; // no persistir el PIN en memoria más de lo necesario
+
+        var cuerpo = new
+        {
+            firmaBase64 = Convert.ToBase64String(firma),
+            certificadoBase64 = Convert.ToBase64String(elegido.CertDer),
+            algoritmo = "RsaSha256",
+        };
+        var respuesta = await http.PostAsJsonAsync(
+            $"/api/firmas/{parametros.SolicitudId}/flujos/{parametros.FlujoId}/completar-firma-local", cuerpo);
+        var textoRespuesta = await respuesta.Content.ReadAsStringAsync();
+
+        if (!respuesta.IsSuccessStatusCode)
+            return new ResultadoFirma(false, $"SecureSign rechazó el resultado (HTTP {(int)respuesta.StatusCode}): {textoRespuesta}", null);
+
+        void MostrarExito() =>
+            MessageBox.Show($"El documento \"{nombreArchivo}\" se firmó correctamente.", "SecureSign Perú", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        if (hiloUi is not null) hiloUi.Invoke(MostrarExito);
+        else MostrarExito();
+
+        return new ResultadoFirma(true, "Documento firmado correctamente.", JsonSerializer.Deserialize<JsonElement>(textoRespuesta));
     }
 
     // ---------- PKCS#11 (misma lógica probada en ProveedorCriptograficoPkcs11 / DnieProbe) ----------
