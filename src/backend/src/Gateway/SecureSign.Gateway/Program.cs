@@ -39,7 +39,7 @@ builder.Services.AddCors(options =>
         .AllowAnyOrigin()
         .AllowAnyMethod()
         .AllowAnyHeader()
-        .WithExposedHeaders("X-Hash-Documento", "X-Evidencia-Url"));
+        .WithExposedHeaders("X-Hash-Documento", "X-Evidencia-Url", "Content-Disposition"));
 });
 
 var app = builder.Build();

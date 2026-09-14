@@ -65,10 +65,18 @@ async function descargarConToken(path, nombreSugerido) {
   const respuesta = await api(path);
   if (!respuesta.ok) throw new Error(`No se pudo descargar (HTTP ${respuesta.status}).`);
   const blob = await respuesta.blob();
+
+  // Si el servidor sugiere un nombre de archivo (Content-Disposition), se
+  // usa ese en vez del genérico — así el navegador lo guarda con su nombre
+  // original en vez de siempre "documento-firmado-visual.pdf", etc.
+  const disposicion = respuesta.headers.get("Content-Disposition") || "";
+  const coincidencia = disposicion.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+  const nombreArchivo = coincidencia ? decodeURIComponent(coincidencia[1]) : nombreSugerido;
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = nombreSugerido;
+  a.download = nombreArchivo;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -384,6 +392,14 @@ document.getElementById("btnFirmarIndividual").addEventListener("click", async (
   } catch (e) {
     document.getElementById("ind-pin").value = "";
     mostrarMensaje("mensajeFirmaIndividual", `Error al firmar: ${e.message}`, "error");
+  }
+});
+
+document.getElementById("btnDescargarFirmado").addEventListener("click", async () => {
+  try {
+    await descargarConToken(`/api/documentos/${estado.individual.documentoId}/firmado`, "documento-firmado");
+  } catch (e) {
+    mostrarMensaje("mensajeFirmaIndividual", `Error al descargar: ${e.message}`, "error");
   }
 });
 
