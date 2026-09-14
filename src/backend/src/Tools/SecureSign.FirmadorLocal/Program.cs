@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using System.Windows.Forms;
 using Microsoft.Win32;
 using Net.Pkcs11Interop.Common;
 using Net.Pkcs11Interop.HighLevelAPI;
@@ -22,7 +23,8 @@ namespace SecureSign.FirmadorLocal;
 /// 2. Calcula su hash SHA-256 EN ESTA MÁQUINA (nunca confía en un hash que
 ///    le pasen — así nunca firma "a ciegas" un hash de origen desconocido).
 /// 3. Firma ese hash con la tarjeta/token PKCS#11 conectado localmente,
-///    pidiendo el PIN en esta misma consola.
+///    mostrando una ventana (ver <see cref="VentanaFirma"/>) para elegir el
+///    certificado e ingresar el PIN — no un prompt de consola.
 /// 4. Envía de vuelta SOLO la firma resultante y el certificado público —
 ///    ver SecureSign.Signature.Application.FirmarLocal.VerificadorFirmaExterna,
 ///    que verifica esa firma con la llave PÚBLICA del certificado (una
@@ -37,6 +39,7 @@ internal static class Program
     private static readonly byte[] DigestInfoPrefijoSha256 =
         Convert.FromHexString("3031300D060960864801650304020105000420");
 
+    [STAThread]
     private static async Task<int> Main(string[] args)
     {
         Console.Title = "SecureSign Perú — Firmador Local";
@@ -55,6 +58,9 @@ internal static class Program
             return 0;
         }
 
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+
         try
         {
             await ProcesarInvocacionAsync(args[0]);
@@ -64,13 +70,8 @@ internal static class Program
         {
             Console.WriteLine();
             Console.WriteLine($"ERROR: {ex.Message}");
+            MessageBox.Show(ex.Message, "SecureSign Perú — Error al firmar", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
-        }
-        finally
-        {
-            Console.WriteLine();
-            Console.WriteLine("Presiona ENTER para cerrar esta ventana...");
-            Console.ReadLine();
         }
     }
 
@@ -121,22 +122,37 @@ internal static class Program
         var documentoId = estado.GetProperty("documentoId").GetGuid();
 
         Console.WriteLine("Descargando el documento a firmar...");
-        var contenido = await http.GetByteArrayAsync($"/api/documentos/{documentoId}/contenido");
+        var respuestaDocumento = await http.GetAsync($"/api/documentos/{documentoId}/contenido");
+        respuestaDocumento.EnsureSuccessStatusCode();
+        var contenido = await respuestaDocumento.Content.ReadAsByteArrayAsync();
+        var nombreArchivo = respuestaDocumento.Content.Headers.ContentDisposition?.FileNameStar
+            ?? respuestaDocumento.Content.Headers.ContentDisposition?.FileName
+            ?? documentoId.ToString();
         var hash = SHA256.HashData(contenido);
         Console.WriteLine($"  {contenido.Length} bytes — SHA-256: {Convert.ToHexString(hash)}");
 
-        var (certificadoDer, slotId, ckaId) = SeleccionarCertificado();
-        var pin = LeerPinOculto("PIN de la tarjeta/token: ");
+        var candidatos = EnumerarCertificados();
+
+        Console.WriteLine("Mostrando ventana de firma — elige el certificado e ingresa tu PIN ahí...");
+        using var ventana = new VentanaFirma(nombreArchivo, contenido.Length, Convert.ToHexString(hash), candidatos.Select(c => c.Descripcion).ToList());
+        if (ventana.ShowDialog() != DialogResult.OK || ventana.IndiceCertificadoElegido < 0)
+        {
+            Console.WriteLine("Operación cancelada por el usuario.");
+            return;
+        }
+
+        var elegido = candidatos[ventana.IndiceCertificadoElegido];
+        var pin = ventana.Pin;
 
         Console.WriteLine("Firmando en esta máquina (el PIN no sale de aquí)...");
-        var firma = FirmarConTarjeta(slotId, ckaId, hash, pin);
+        var firma = FirmarConTarjeta(elegido.SlotId, elegido.CkaId, hash, pin);
         pin = string.Empty; // no persistir el PIN en memoria más de lo necesario
 
         Console.WriteLine("Enviando el resultado a SecureSign...");
         var cuerpo = new
         {
             firmaBase64 = Convert.ToBase64String(firma),
-            certificadoBase64 = Convert.ToBase64String(certificadoDer),
+            certificadoBase64 = Convert.ToBase64String(elegido.CertDer),
             algoritmo = "RsaSha256",
         };
         var respuesta = await http.PostAsJsonAsync(
@@ -149,6 +165,7 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("ÉXITO — documento firmado correctamente.");
         Console.WriteLine(textoRespuesta);
+        MessageBox.Show($"El documento \"{nombreArchivo}\" se firmó correctamente.", "SecureSign Perú", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private static ParametrosFirma ParsearParametros(string uriCompleta)
@@ -178,12 +195,19 @@ internal static class Program
         Environment.GetEnvironmentVariable("SECURESIGN_PKCS11_LIB")
         ?? @"C:\Program Files\IDEMIA\IDPlugClassic\DLLs\idplug-pkcs11.dll";
 
-    private static (byte[] CertificadoDer, ulong SlotId, byte[] CkaId) SeleccionarCertificado()
+    private sealed record CandidatoCertificado(ulong SlotId, byte[] CkaId, string Descripcion, byte[] CertDer);
+
+    /// <summary>
+    /// Enumera los certificados de firma (no-CA) de los tokens conectados,
+    /// sin ninguna interacción — la elección la hace el usuario en
+    /// <see cref="VentanaFirma"/>, no aquí.
+    /// </summary>
+    private static List<CandidatoCertificado> EnumerarCertificados()
     {
         var factory = new Pkcs11InteropFactories();
         using IPkcs11Library pkcs11 = factory.Pkcs11LibraryFactory.LoadPkcs11Library(factory, RutaLibreriaPkcs11, AppType.SingleThreaded);
 
-        var candidatos = new List<(ulong SlotId, byte[] CkaId, string Descripcion, byte[] CertDer)>();
+        var candidatos = new List<CandidatoCertificado>();
         foreach (var slot in pkcs11.GetSlotList(SlotsType.WithTokenPresent))
         {
             using ISession session = slot.OpenSession(SessionType.ReadOnly);
@@ -203,7 +227,7 @@ internal static class Program
                 var esCA = x509.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault()?.CertificateAuthority ?? false;
                 if (esCA) continue;
 
-                candidatos.Add((slot.SlotId, ckaId, $"{etiqueta} — {x509.Subject}", valor));
+                candidatos.Add(new CandidatoCertificado(slot.SlotId, ckaId, $"{etiqueta} — {x509.Subject}", valor));
             }
         }
 
@@ -211,21 +235,7 @@ internal static class Program
             throw new InvalidOperationException(
                 "No se encontró ningún certificado de firma en los tokens conectados. Verifica que la tarjeta esté insertada.");
 
-        Console.WriteLine();
-        Console.WriteLine("Certificados disponibles para firmar:");
-        for (int i = 0; i < candidatos.Count; i++)
-            Console.WriteLine($"  [{i}] {candidatos[i].Descripcion}");
-
-        int indice = 0;
-        if (candidatos.Count > 1)
-        {
-            Console.Write($"Elige el número del certificado (0-{candidatos.Count - 1}): ");
-            if (!int.TryParse(Console.ReadLine(), out indice) || indice < 0 || indice >= candidatos.Count)
-                throw new ArgumentException("Selección inválida.");
-        }
-
-        var elegido = candidatos[indice];
-        return (elegido.CertDer, elegido.SlotId, elegido.CkaId);
+        return candidatos;
     }
 
     private static byte[] FirmarConTarjeta(ulong slotId, byte[] ckaId, byte[] hashDocumento, string pin)
@@ -258,27 +268,5 @@ internal static class Program
         {
             session.Logout();
         }
-    }
-
-    private static string LeerPinOculto(string mensaje)
-    {
-        Console.Write(mensaje);
-        var pin = new System.Text.StringBuilder();
-        ConsoleKeyInfo tecla;
-        while ((tecla = Console.ReadKey(intercept: true)).Key != ConsoleKey.Enter)
-        {
-            if (tecla.Key == ConsoleKey.Backspace && pin.Length > 0)
-            {
-                pin.Remove(pin.Length - 1, 1);
-                Console.Write("\b \b");
-            }
-            else if (!char.IsControl(tecla.KeyChar))
-            {
-                pin.Append(tecla.KeyChar);
-                Console.Write('*');
-            }
-        }
-        Console.WriteLine();
-        return pin.ToString();
     }
 }
