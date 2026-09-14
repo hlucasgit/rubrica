@@ -14,4 +14,8 @@
     <PackageReference Include="Pkcs11Interop" Version="5.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\BuildingBlocks\SecureSign.Pades\SecureSign.Pades.csproj" />
+  </ItemGroup>
+
 </Project>

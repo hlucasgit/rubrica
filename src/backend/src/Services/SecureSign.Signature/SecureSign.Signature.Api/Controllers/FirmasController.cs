@@ -40,7 +40,13 @@ public sealed record FirmarRequest(string? Pin = null);
 /// ya fue calculada en la máquina del firmante, con su propio certificado —
 /// aquí solo se envía el resultado para verificar y completar el flujo.
 /// </summary>
-public sealed record FirmarLocalRequest(string FirmaBase64, string CertificadoBase64, string Algoritmo);
+/// <param name="DocumentoPadesBase64">
+/// El PDF ya firmado con un CMS/PAdES real incrustado (ver SecureSign.Pades),
+/// calculado en la misma máquina y con la misma tarjeta que <see cref="FirmaBase64"/>
+/// — opcional: si el documento no era PDF o algo falló al incrustar la firma,
+/// viaja nulo y el sistema sigue funcionando con la firma desacoplada clásica.
+/// </param>
+public sealed record FirmarLocalRequest(string FirmaBase64, string CertificadoBase64, string Algoritmo, string? DocumentoPadesBase64 = null);
 
 /// <summary>Coordenadas normalizadas (0..1, origen arriba-izquierda) elegidas en el visor — ver PosicionFirma.</summary>
 public sealed record PosicionFirmaRequest(int NumeroPagina, double X, double Y, double Ancho, double Alto);
@@ -202,7 +208,8 @@ public sealed class FirmasController(ISender mediator) : ControllerBase
     {
         var tenant = User.ObtenerTenantContext();
         var comando = new FirmarLocalCommand(
-            tenant.TenantId, id, flujoId, body.FirmaBase64, body.CertificadoBase64, body.Algoritmo, CapturarContexto());
+            tenant.TenantId, id, flujoId, body.FirmaBase64, body.CertificadoBase64, body.Algoritmo, CapturarContexto(),
+            body.DocumentoPadesBase64);
 
         var resultado = await mediator.Send(comando, ct);
 

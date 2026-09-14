@@ -8,6 +8,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 using Net.Pkcs11Interop.Common;
 using Net.Pkcs11Interop.HighLevelAPI;
+using SecureSign.Pades;
 
 namespace SecureSign.FirmadorLocal;
 
@@ -219,6 +220,7 @@ internal static class Program
         var respuestaDocumento = await http.GetAsync($"/api/documentos/{documentoId}/contenido");
         respuestaDocumento.EnsureSuccessStatusCode();
         var contenido = await respuestaDocumento.Content.ReadAsByteArrayAsync();
+        var tipoContenido = respuestaDocumento.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
         var nombreArchivo = respuestaDocumento.Content.Headers.ContentDisposition?.FileNameStar
             ?? respuestaDocumento.Content.Headers.ContentDisposition?.FileName
             ?? documentoId.ToString();
@@ -247,6 +249,31 @@ internal static class Program
         var elegido = candidatos[indiceElegido];
 
         var firma = FirmarConTarjeta(elegido.SlotId, elegido.CkaId, hash, pin);
+
+        // Además de la firma "desacoplada" clásica (arriba — la que de verdad
+        // autoriza el flujo y queda auditada), incrustamos una firma PAdES
+        // real en el propio PDF: mismo certificado, misma tarjeta, un
+        // segundo Sign() dentro de la misma sesión (no pide el PIN de
+        // nuevo). Si algo falla aquí (documento no es PDF, está corrupto,
+        // etc.) seguimos igual con la firma clásica — ver RUNBOOK.md 12.8.
+        string? documentoPadesBase64 = null;
+        if (tipoContenido.Contains("pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var certificado = new X509Certificate2(elegido.CertDer);
+                var preparado = PdfSignaturePlaceholder.Preparar(
+                    contenido, certificado.GetNameInfo(X509NameType.SimpleName, false), "Firma electrónica", DateTimeOffset.UtcNow);
+                byte[] cms = CmsBuilder.Firmar(
+                    preparado.ContenidoCubierto, certificado, cadenaCertificacion: null,
+                    datos => FirmarConTarjeta(elegido.SlotId, elegido.CkaId, SHA256.HashData(datos), pin));
+                documentoPadesBase64 = Convert.ToBase64String(PdfSignaturePlaceholder.Inyectar(preparado, cms));
+            }
+            catch
+            {
+                documentoPadesBase64 = null;
+            }
+        }
         pin = string.Empty; // no persistir el PIN en memoria más de lo necesario
 
         var cuerpo = new
@@ -254,6 +281,7 @@ internal static class Program
             firmaBase64 = Convert.ToBase64String(firma),
             certificadoBase64 = Convert.ToBase64String(elegido.CertDer),
             algoritmo = "RsaSha256",
+            documentoPadesBase64,
         };
         var respuesta = await http.PostAsJsonAsync(
             $"/api/firmas/{parametros.SolicitudId}/flujos/{parametros.FlujoId}/completar-firma-local", cuerpo);

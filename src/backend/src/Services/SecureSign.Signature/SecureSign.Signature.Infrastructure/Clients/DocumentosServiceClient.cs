@@ -38,4 +38,11 @@ public sealed class DocumentosServiceClient(HttpClient http) : IDocumentosServic
 
         return new ContenidoDocumentoRemoto(contenido, tipoContenido, nombreArchivo);
     }
+
+    public async Task GuardarDocumentoFirmadoPadesAsync(Guid documentoId, byte[] contenido, CancellationToken ct = default)
+    {
+        var cuerpo = new { contenidoBase64 = Convert.ToBase64String(contenido) };
+        var respuesta = await http.PutAsJsonAsync($"/api/documentos/{documentoId}/firmado-pades", cuerpo, ct);
+        respuesta.EnsureSuccessStatusCode();
+    }
 }

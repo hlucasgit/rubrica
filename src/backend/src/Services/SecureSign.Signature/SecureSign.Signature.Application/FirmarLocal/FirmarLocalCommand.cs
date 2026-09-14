@@ -18,4 +18,5 @@ public sealed record FirmarLocalCommand(
     string FirmaBase64,
     string CertificadoBase64,
     string Algoritmo,
-    DatosContextualesRemoto DatosContextuales) : IRequest<Result<FirmarDocumentoResponse>>;
+    DatosContextualesRemoto DatosContextuales,
+    string? DocumentoPadesBase64 = null) : IRequest<Result<FirmarDocumentoResponse>>;

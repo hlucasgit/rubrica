@@ -1,13 +1,18 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SecureSign.Documents.Application.GuardarContenidoFirmadoPades;
 using SecureSign.Documents.Application.MarcarDocumentoFirmado;
+using SecureSign.Documents.Application.ObtenerContenidoFirmado;
 using SecureSign.Documents.Application.ObtenerDocumento;
 using SecureSign.Documents.Application.RegistrarDocumento;
 using SecureSign.Documents.Domain;
 using SecureSign.Shared.Auth;
 
 namespace SecureSign.Documents.Api.Controllers;
+
+/// <summary>Cuerpo de PUT /api/documentos/{id}/firmado-pades — ver GuardarContenidoFirmadoPadesCommand.</summary>
+public sealed record GuardarFirmadoPadesRequest(string ContenidoBase64);
 
 [ApiController]
 [Authorize]
@@ -107,24 +112,45 @@ public sealed class DocumentosController(ISender mediator, IAlmacenamientoDocume
         return File(contenido, resultado.Valor.TipoContenido, resultado.Valor.NombreArchivo);
     }
 
-    /// <summary>GET /api/documentos/{id}/firmado — ver manual de integración 5.4.</summary>
+    /// <summary>
+    /// GET /api/documentos/{id}/firmado — ver manual de integración 5.4. Sirve
+    /// el PDF con la firma PAdES real incrustada cuando el Firmador Local la
+    /// produjo (ver ObtenerContenidoFirmadoHandler); si no, el original tal
+    /// cual (limitación deliberada de la firma "desacoplada" — RUNBOOK.md 12.8).
+    /// </summary>
     [HttpGet("{id:guid}/firmado")]
     public async Task<IActionResult> DescargarFirmado(Guid id, CancellationToken ct)
     {
         var tenant = User.ObtenerTenantContext();
-        var resultado = await mediator.Send(new ObtenerDocumentoQuery(tenant.TenantId, id), ct);
+        var resultado = await mediator.Send(new ObtenerContenidoFirmadoQuery(tenant.TenantId, id), ct);
 
         if (!resultado.EsExitoso)
             return NotFound(new { error = "NO_ENCONTRADO", mensaje = resultado.Error });
 
-        if (resultado.Valor.Estado != nameof(EstadoDocumento.Firmado))
-            return Conflict(new { error = "DOCUMENTO_NO_FIRMADO", mensaje = $"El documento está en estado {resultado.Valor.Estado}, no Firmado." });
-
-        var contenido = await almacenamiento.LeerAsync(resultado.Valor.UrlAlmacenamiento, ct);
-
         Response.Headers["X-Hash-Documento"] = resultado.Valor.HashSha256;
         Response.Headers["X-Evidencia-Url"] = $"/api/evidencias/documento/{tenant.TenantId}/{id}";
 
-        return File(contenido, resultado.Valor.TipoContenido, resultado.Valor.NombreArchivo);
+        return File(resultado.Valor.Contenido, resultado.Valor.TipoContenido, resultado.Valor.NombreArchivo);
+    }
+
+    /// <summary>
+    /// PUT /api/documentos/{id}/firmado-pades — uso interno: el Servicio de
+    /// Firma lo invoca tras recibir del Firmador Local el PDF ya firmado con
+    /// un CMS/PAdES real incrustado (ver FirmarLocalHandler).
+    /// </summary>
+    [HttpPut("{id:guid}/firmado-pades")]
+    public async Task<IActionResult> GuardarFirmadoPades(Guid id, [FromBody] GuardarFirmadoPadesRequest body, CancellationToken ct)
+    {
+        var tenant = User.ObtenerTenantContext();
+
+        byte[] contenido;
+        try { contenido = Convert.FromBase64String(body.ContenidoBase64); }
+        catch (FormatException) { return BadRequest(new { error = "CONTENIDO_INVALIDO", mensaje = "contenidoBase64 no es Base64 válido." }); }
+
+        var resultado = await mediator.Send(new GuardarContenidoFirmadoPadesCommand(tenant.TenantId, id, contenido), ct);
+
+        return resultado.EsExitoso
+            ? NoContent()
+            : BadRequest(new { error = "SOLICITUD_INVALIDA", mensaje = resultado.Error });
     }
 }

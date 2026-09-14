@@ -35,6 +35,7 @@ public sealed class DocumentsDbContext(DbContextOptions<DocumentsDbContext> opti
             b.Property(d => d.Estado).HasConversion<string>().HasMaxLength(30).IsRequired();
             b.Property(d => d.CreadoPor).IsRequired();
             b.Property(d => d.CreadoEn).IsRequired();
+            b.Property(d => d.ContenidoFirmadoPades).IsRequired(false);
 
             b.HasIndex(d => new { d.TenantId, d.Estado });
             b.HasIndex(d => d.CodigoExterno);

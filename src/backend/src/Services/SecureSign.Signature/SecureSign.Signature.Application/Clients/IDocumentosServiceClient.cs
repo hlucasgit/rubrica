@@ -17,4 +17,11 @@ public interface IDocumentosServiceClient
 
     /// <summary>Bytes originales del documento — ver DocumentosController GET /contenido.</summary>
     Task<ContenidoDocumentoRemoto?> ObtenerContenidoAsync(Guid documentoId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Guarda el PDF con la firma PAdES real incrustada (ver SecureSign.Pades
+    /// y FirmarLocalHandler) — a partir de entonces GET /api/documentos/{id}/firmado
+    /// sirve este contenido en vez del original tal cual.
+    /// </summary>
+    Task GuardarDocumentoFirmadoPadesAsync(Guid documentoId, byte[] contenido, CancellationToken ct = default);
 }

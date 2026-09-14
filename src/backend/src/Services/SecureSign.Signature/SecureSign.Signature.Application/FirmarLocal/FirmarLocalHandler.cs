@@ -80,6 +80,23 @@ public sealed class FirmarLocalHandler(
 
         await evidencias.RegistrarAsync(solicitud.DocumentoId, "Firma", request.DatosContextuales, ct: ct);
 
+        if (!string.IsNullOrEmpty(request.DocumentoPadesBase64))
+        {
+            try
+            {
+                await documentos.GuardarDocumentoFirmadoPadesAsync(
+                    solicitud.DocumentoId, Convert.FromBase64String(request.DocumentoPadesBase64), ct);
+            }
+            catch (Exception ex) when (ex is FormatException or HttpRequestException)
+            {
+                // El PDF con PAdES es un extra sobre la firma ya validada arriba
+                // (la que de verdad autoriza el flujo) — si viene corrupto o el
+                // Servicio Documental no responde, no se aborta la firma, solo
+                // se pierde el sello incrustado y GET /firmado sigue sirviendo
+                // el original (ver RUNBOOK.md 12.8).
+            }
+        }
+
         return Result.Exitoso(new FirmarDocumentoResponse(solicitud.Estado.ToString(), request.Algoritmo, request.FirmaBase64));
     }
 }

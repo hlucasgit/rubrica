@@ -31,6 +31,17 @@ public sealed class Documento : Entity
     public Guid CreadoPor { get; private set; }
     public DateTimeOffset CreadoEn { get; private set; }
 
+    /// <summary>
+    /// El PDF ya firmado con un CMS/PAdES real incrustado (/ByteRange +
+    /// /Contents — ver SecureSign.Pades), producido por el Firmador Local en
+    /// la máquina del firmante. Nulo si el documento no es PDF, si se firmó
+    /// con un flujo que no pasa por el Firmador Local (p. ej. certificado de
+    /// software), o si aún no se ha firmado — en esos casos
+    /// GET /api/documentos/{id}/firmado sirve el original tal cual (ver
+    /// RUNBOOK.md 12.8, limitación deliberada de la firma "desacoplada").
+    /// </summary>
+    public byte[]? ContenidoFirmadoPades { get; private set; }
+
     private Documento() { }
 
     public static Result<Documento> Registrar(
@@ -87,6 +98,8 @@ public sealed class Documento : Entity
         Estado = EstadoDocumento.Firmado;
         return Result.Exitoso();
     }
+
+    public void GuardarContenidoFirmadoPades(byte[] contenido) => ContenidoFirmadoPades = contenido;
 
     public void MarcarEnProceso() => Estado = EstadoDocumento.EnProceso;
     public void MarcarRechazado() => Estado = EstadoDocumento.Rechazado;
