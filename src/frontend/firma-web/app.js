@@ -128,6 +128,75 @@ document.getElementById("puertoFirmadorLocal").addEventListener("change", (e) =>
   estado.puertoFirmadorLocal = Number.isInteger(puerto) && puerto > 0 && puerto <= 65535 ? puerto : 48596;
 });
 
+// ---------- crear una solicitud nueva (paso 0, opcional) ----------
+
+document.getElementById("crear-firmanteId").value = crypto.randomUUID();
+
+document.getElementById("btnGenerarFirmanteId").addEventListener("click", () => {
+  document.getElementById("crear-firmanteId").value = crypto.randomUUID();
+});
+
+document.getElementById("btnCrearSolicitud").addEventListener("click", async () => {
+  limpiarMensaje("mensajeCrearSolicitud");
+
+  if (!estado.token) { mostrarMensaje("mensajeCrearSolicitud", "Conéctate primero en la pestaña 1.", "error"); return; }
+
+  const archivo = document.getElementById("crear-archivo").files[0];
+  if (!archivo) { mostrarMensaje("mensajeCrearSolicitud", "Elige un archivo primero.", "error"); return; }
+
+  const tipoFirma = document.getElementById("crear-tipoFirma").value;
+  let firmanteId = document.getElementById("crear-firmanteId").value.trim();
+  if (!firmanteId) {
+    firmanteId = crypto.randomUUID();
+    document.getElementById("crear-firmanteId").value = firmanteId;
+  }
+
+  try {
+    mostrarMensaje("mensajeCrearSolicitud", "Subiendo el documento...", "info");
+    const formulario = new FormData();
+    formulario.append("archivo", archivo);
+    formulario.append("usuarioSolicitanteId", "33333333-3333-3333-3333-333333333333");
+
+    const respuestaDocumento = await api("/api/documentos", { method: "POST", body: formulario });
+    if (!respuestaDocumento.ok) throw new Error(`No se pudo subir el documento (HTTP ${respuestaDocumento.status}).`);
+    const documento = await respuestaDocumento.json();
+
+    mostrarMensaje("mensajeCrearSolicitud", "Creando la solicitud de firma...", "info");
+    const solicitud = await apiJson("/api/firmas/solicitudes", {
+      method: "POST",
+      body: JSON.stringify({
+        documentoId: documento.idDocumento,
+        tipoFirma,
+        requiereOrdenSecuencial: false,
+        firmantes: [{ usuarioId: firmanteId, orden: 1 }],
+      }),
+    });
+
+    // Avanzada/Digital exigen más índice de confianza del que trae un
+    // usuario nuevo (30) — para que la prueba funcione de una, se simula la
+    // señal que en producción generaría una validación real (ver
+    // docs/02-innovacion-patente, innovación #5).
+    if (tipoFirma !== "Simple") {
+      await api(`/api/interno/identidad/${firmanteId}/senales`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipoSenal: "CertificadoEmitido" }),
+      });
+    }
+
+    const detalle = await apiJson(`/api/firmas/${solicitud.solicitudFirmaId}/estado`);
+    const flujoId = detalle.firmantes[0].flujoFirmaId;
+
+    document.getElementById("ind-solicitudId").value = solicitud.solicitudFirmaId;
+    document.getElementById("ind-flujoId").value = flujoId;
+
+    mostrarMensaje("mensajeCrearSolicitud",
+      `Solicitud creada (código de verificación: <b>${solicitud.codigoVerificacionPublico}</b>). Los campos de abajo ya se llenaron — dale a "Cargar documento".`, "ok");
+  } catch (e) {
+    mostrarMensaje("mensajeCrearSolicitud", `Error: ${e.message}`, "error");
+  }
+});
+
 // ---------- firma individual: cargar ----------
 
 document.getElementById("btnCargarIndividual").addEventListener("click", async () => {

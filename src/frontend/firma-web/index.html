@@ -206,6 +206,34 @@
   <!-- ===================== TAB: FIRMA INDIVIDUAL ===================== -->
   <section class="panel" id="tab-individual">
     <div class="tarjeta">
+      <h2>0. Crear una solicitud nueva (opcional, para pruebas)</h2>
+      <p class="ayuda">Si todavía no tienes una Solicitud/Flujo, créalos aquí subiendo tu propio archivo — no necesitas pedírselos a nadie. Al terminar, los campos de abajo se llenan solos.</p>
+      <div class="fila">
+        <div class="campo">
+          <label>Documento a firmar (de tu PC)</label>
+          <input type="file" id="crear-archivo">
+        </div>
+        <div class="campo">
+          <label>Tipo de firma</label>
+          <select id="crear-tipoFirma">
+            <option value="Simple">Simple (índice ≥ 30 — cualquier usuario nuevo)</option>
+            <option value="Avanzada">Avanzada (índice ≥ 70)</option>
+            <option value="Digital">Digital (índice ≥ 95 — para firmar con DNIe/certificado real)</option>
+          </select>
+        </div>
+      </div>
+      <div class="fila">
+        <div class="campo" style="flex:1">
+          <label>ID del firmante (UsuarioId)</label>
+          <input id="crear-firmanteId">
+        </div>
+        <button class="accion secundario" id="btnGenerarFirmanteId">Generar uno nuevo</button>
+        <button class="accion" id="btnCrearSolicitud">Crear documento y solicitud</button>
+      </div>
+      <div id="mensajeCrearSolicitud"></div>
+    </div>
+
+    <div class="tarjeta">
       <h2>Cargar una solicitud de firma</h2>
       <div class="fila">
         <div class="campo">
