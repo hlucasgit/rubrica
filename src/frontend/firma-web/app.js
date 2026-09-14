@@ -13,6 +13,7 @@ const estado = {
   gatewayUrl: "http://localhost:8080",
   token: null,
   firmanteId: null,
+  puertoFirmadorLocal: 48596,
   individual: {
     solicitudId: null,
     flujoId: null,
@@ -120,6 +121,11 @@ document.getElementById("btnUsarTokenManual").addEventListener("click", () => {
 
 document.getElementById("firmanteId").addEventListener("change", (e) => {
   estado.firmanteId = e.target.value.trim() || null;
+});
+
+document.getElementById("puertoFirmadorLocal").addEventListener("change", (e) => {
+  const puerto = Number(e.target.value);
+  estado.puertoFirmadorLocal = Number.isInteger(puerto) && puerto > 0 && puerto <= 65535 ? puerto : 48596;
 });
 
 // ---------- firma individual: cargar ----------
@@ -332,12 +338,18 @@ document.getElementById("btnVerValidacion").addEventListener("click", async () =
 
 // ---------- Firmador Local (servicio HTTP local, ver RUNBOOK.md sección 12) ----------
 //
-// El Firmador Local, una vez iniciado, escucha en este puerto — igual que
-// startSignature(port, param) de la propia Plataforma FIRMA PERÚ. Se le
+// El Firmador Local, una vez iniciado, escucha en un puerto local — igual
+// que startSignature(port, param) de la propia Plataforma FIRMA PERÚ. Se le
 // habla con fetch() normal, sin depender de que Windows resuelva ningún
 // protocolo de URL personalizado (esa vía existe como respaldo, ver más
 // abajo, pero resultó poco confiable en pruebas — ver RUNBOOK.md).
-const URL_SERVICIO_LOCAL = "http://127.0.0.1:48596";
+//
+// El puerto por defecto es 48596, pero es configurable (--puerto en el
+// Firmador Local, campo "Puerto del Firmador Local" en la pestaña de
+// Conexión aquí) — por si ese puerto ya está en uso por otra aplicación.
+function urlServicioLocal() {
+  return `http://127.0.0.1:${estado.puertoFirmadorLocal}`;
+}
 
 document.getElementById("btnFirmarConFirmadorLocal").addEventListener("click", async () => {
   const { solicitudId, flujoId } = estado.individual;
@@ -346,7 +358,7 @@ document.getElementById("btnFirmarConFirmadorLocal").addEventListener("click", a
   const servicioActivo = await estaActivoElFirmadorLocal();
   if (!servicioActivo) {
     mostrarMensaje("mensajeFirmadorLocal",
-      "No se detecta el Firmador Local corriendo en esta PC. Ábrelo (doble clic al .exe instalado) y vuelve a intentar — queda con un ícono en la bandeja del sistema mientras esté activo.", "error");
+      `No se detecta el Firmador Local en el puerto ${estado.puertoFirmadorLocal}. Ábrelo (doble clic al .exe instalado) — queda con un ícono en la bandeja del sistema mientras esté activo — o revisa que el puerto configurado aquí coincida con el que usaste al iniciarlo.`, "error");
     return;
   }
 
@@ -354,7 +366,7 @@ document.getElementById("btnFirmarConFirmadorLocal").addEventListener("click", a
     "Firmador Local detectado — revisa la ventana que se abrió para elegir tu certificado e ingresar tu PIN.", "info");
 
   try {
-    const respuesta = await fetch(`${URL_SERVICIO_LOCAL}/firmar`, {
+    const respuesta = await fetch(`${urlServicioLocal()}/firmar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(parametros),
@@ -376,7 +388,7 @@ async function estaActivoElFirmadorLocal() {
   try {
     const controlador = new AbortController();
     const limite = setTimeout(() => controlador.abort(), 1500);
-    const respuesta = await fetch(`${URL_SERVICIO_LOCAL}/ping`, { signal: controlador.signal });
+    const respuesta = await fetch(`${urlServicioLocal()}/ping`, { signal: controlador.signal });
     clearTimeout(limite);
     return respuesta.ok;
   } catch {

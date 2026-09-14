@@ -18,12 +18,15 @@ namespace SecureSign.FirmadorLocal;
 ///
 /// MODO PRINCIPAL — servicio local: al ejecutarse sin argumentos, queda
 /// corriendo en segundo plano (ícono en la bandeja) escuchando peticiones
-/// HTTP en <c>http://127.0.0.1:48596</c>. El navegador simplemente hace un
-/// <c>fetch()</c> normal a ese puerto — igual que hace la propia Plataforma
-/// FIRMA PERÚ con su <c>startSignature(port, param)</c> — sin depender en
-/// absoluto de que Windows resuelva ningún protocolo de URL personalizado
-/// (ver ServicioLocal.cs y la nota de troubleshooting en RUNBOOK.md sección
-/// 12, donde esa resolución resultó ser poco confiable).
+/// HTTP en <c>http://127.0.0.1:{puerto}</c> (por defecto <see cref="PuertoPorDefecto"/>,
+/// configurable con <c>--puerto &lt;n&gt;</c> o <c>SECURESIGN_FIRMADOR_PUERTO</c>
+/// si ese puerto ya está en uso — ver <see cref="ResolverPuerto"/>). El
+/// navegador simplemente hace un <c>fetch()</c> normal a ese puerto — igual
+/// que hace la propia Plataforma FIRMA PERÚ con su
+/// <c>startSignature(port, param)</c> — sin depender en absoluto de que
+/// Windows resuelva ningún protocolo de URL personalizado (ver
+/// ServicioLocal.cs y la nota de troubleshooting en RUNBOOK.md sección 12,
+/// donde esa resolución resultó ser poco confiable).
 ///
 /// MODO HEREDADO — invocación por <c>securesign://</c>: se conserva como
 /// alternativa/respaldo (ver RUNBOOK.md), útil por ejemplo con
@@ -45,7 +48,13 @@ namespace SecureSign.FirmadorLocal;
 /// </summary>
 internal static class Program
 {
-    internal const int PuertoServicioLocal = 48596;
+    /// <summary>
+    /// Puerto por defecto — configurable si ya está en uso por otra
+    /// aplicación, vía argumento <c>--puerto &lt;n&gt;</c> o la variable de
+    /// entorno <c>SECURESIGN_FIRMADOR_PUERTO</c> (el argumento tiene
+    /// prioridad). Ver <see cref="ResolverPuerto"/>.
+    /// </summary>
+    internal const int PuertoPorDefecto = 48596;
 
     private static readonly byte[] DigestInfoPrefijoSha256 =
         Convert.FromHexString("3031300D060960864801650304020105000420");
@@ -88,10 +97,48 @@ internal static class Program
             }
         }
 
+        int puerto;
+        try
+        {
+            puerto = ResolverPuerto(args);
+        }
+        catch (ArgumentException ex)
+        {
+            MessageBox.Show(ex.Message, "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return 1;
+        }
+
         // Modo principal: servicio local persistente (ver ServicioLocal.cs).
-        using var servicio = new ServicioLocal();
+        using var servicio = new ServicioLocal(puerto);
         Application.Run(servicio);
         return 0;
+    }
+
+    /// <summary>
+    /// Resuelve el puerto a usar: <c>--puerto &lt;n&gt;</c> gana sobre la
+    /// variable de entorno <c>SECURESIGN_FIRMADOR_PUERTO</c>, que a su vez
+    /// gana sobre <see cref="PuertoPorDefecto"/>. Se puede necesitar
+    /// cambiarlo si el puerto por defecto ya está en uso por otra app.
+    /// </summary>
+    private static int ResolverPuerto(string[] args)
+    {
+        var indiceFlag = Array.IndexOf(args, "--puerto");
+        if (indiceFlag >= 0)
+        {
+            if (indiceFlag + 1 >= args.Length || !ushort.TryParse(args[indiceFlag + 1], out var puertoArgumento) || puertoArgumento == 0)
+                throw new ArgumentException("Uso: SecureSignFirmadorLocal.exe --puerto <número entre 1 y 65535>");
+            return puertoArgumento;
+        }
+
+        var variableEntorno = Environment.GetEnvironmentVariable("SECURESIGN_FIRMADOR_PUERTO");
+        if (!string.IsNullOrWhiteSpace(variableEntorno))
+        {
+            if (!ushort.TryParse(variableEntorno, out var puertoEntorno) || puertoEntorno == 0)
+                throw new ArgumentException($"SECURESIGN_FIRMADOR_PUERTO tiene un valor inválido: \"{variableEntorno}\".");
+            return puertoEntorno;
+        }
+
+        return PuertoPorDefecto;
     }
 
     // ---------- registro del protocolo securesign:// (modo heredado) ----------

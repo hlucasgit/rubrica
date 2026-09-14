@@ -556,9 +556,22 @@ cd F:\SISTEMAS\rubrica\src\backend
 dotnet publish src/Tools/SecureSign.FirmadorLocal -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-firmador-local
 ```
 
-Copia el único `.exe` resultante a donde quieras (p. ej. `%LOCALAPPDATA%\SecureSign\FirmadorLocal\`) y ejecútalo **sin argumentos** — queda corriendo con un ícono en la bandeja del sistema ("SecureSign Perú — Firmador Local (activo)"), escuchando en el puerto 48596. Para cerrarlo: clic derecho en el ícono → "Salir". No necesita registrar nada en Windows para este modo — el `--registrar`/`--desinstalar` del protocolo `securesign://` sigue existiendo como respaldo opcional (ver 12.6), no es necesario para el uso normal.
+Copia el único `.exe` resultante a donde quieras (p. ej. `%LOCALAPPDATA%\SecureSign\FirmadorLocal\`) y ejecútalo **sin argumentos** — queda corriendo con un ícono en la bandeja del sistema ("SecureSign Perú — Firmador Local (puerto 48596)"), escuchando en el puerto 48596 por defecto. Para cerrarlo: clic derecho en el ícono → "Salir". No necesita registrar nada en Windows para este modo — el `--registrar`/`--desinstalar` del protocolo `securesign://` sigue existiendo como respaldo opcional (ver 12.6), no es necesario para el uso normal.
 
 > Para que quede disponible siempre (arranque de sesión), colócalo en la carpeta de inicio de Windows (`shell:startup`) o regístralo como tarea programada — no incluido aquí, es una decisión de despliegue de cada entidad.
+
+**Puerto configurable**: si 48596 ya está en uso por otra aplicación en esa PC, el servicio lo dice claramente al arrancar ("¿ya hay una instancia corriendo, o el puerto está ocupado?") en vez de fallar en silencio. Cambialo con cualquiera de estas dos formas (el argumento gana si se dan ambas):
+
+```powershell
+# Por argumento:
+SecureSignFirmadorLocal.exe --puerto 54321
+
+# Por variable de entorno (útil si lo lanzas desde una tarea programada):
+$env:SECURESIGN_FIRMADOR_PUERTO = "54321"
+SecureSignFirmadorLocal.exe
+```
+
+Verificado en esta sesión con ambos mecanismos — `GET /ping` respondió `{"status":"ok","puerto":54321}` en cada caso. Si cambias el puerto, actualiza también el campo "Puerto del Firmador Local" en la pestaña de Conexión del visor (o el valor equivalente que use tu propia integración) para que apunten al mismo lugar.
 
 ### 12.4 Integrarlo desde una página web
 

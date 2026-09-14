@@ -27,13 +27,21 @@ namespace SecureSign.FirmadorLocal;
 /// </summary>
 internal sealed class ServicioLocal : ApplicationContext
 {
+    private readonly int _puerto;
     private readonly Form _hiloUi;
     private readonly NotifyIcon _icono;
     private readonly HttpListener _listener = new();
     private static readonly JsonSerializerOptions OpcionesJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public ServicioLocal()
+    /// <param name="puerto">
+    /// Puerto donde escuchar — ver <see cref="Program.ResolverPuerto"/> para
+    /// cómo se elige (por defecto <see cref="Program.PuertoPorDefecto"/>,
+    /// configurable si ya está en uso por otra aplicación).
+    /// </param>
+    public ServicioLocal(int puerto)
     {
+        _puerto = puerto;
+
         // Formulario invisible: solo existe para tener un Handle de Win32 al
         // que hacerle Invoke desde el hilo del HttpListener.
         _hiloUi = new Form { ShowInTaskbar = false, Opacity = 0, FormBorderStyle = FormBorderStyle.None, StartPosition = FormStartPosition.Manual, Location = new System.Drawing.Point(-2000, -2000) };
@@ -44,33 +52,34 @@ internal sealed class ServicioLocal : ApplicationContext
         {
             Icon = System.Drawing.SystemIcons.Shield,
             Visible = true,
-            Text = "SecureSign Perú — Firmador Local (activo)",
+            Text = $"SecureSign Perú — Firmador Local (puerto {_puerto})",
         };
         var menu = new ContextMenuStrip();
-        menu.Items.Add($"Escuchando en http://127.0.0.1:{Program.PuertoServicioLocal}/", null, (_, _) => { }).Enabled = false;
+        menu.Items.Add($"Escuchando en http://127.0.0.1:{_puerto}/", null, (_, _) => { }).Enabled = false;
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Salir", null, (_, _) => Salir());
         _icono.ContextMenuStrip = menu;
         _icono.DoubleClick += (_, _) =>
             MessageBox.Show(
-                $"El Firmador Local está activo, escuchando en http://127.0.0.1:{Program.PuertoServicioLocal}/.\n\nPuedes cerrar esta app desde el menú del ícono (clic derecho → Salir).",
+                $"El Firmador Local está activo, escuchando en http://127.0.0.1:{_puerto}/.\n\nPuedes cerrar esta app desde el menú del ícono (clic derecho → Salir).",
                 "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         try
         {
-            _listener.Prefixes.Add($"http://127.0.0.1:{Program.PuertoServicioLocal}/");
+            _listener.Prefixes.Add($"http://127.0.0.1:{_puerto}/");
             _listener.Start();
         }
         catch (HttpListenerException ex)
         {
             MessageBox.Show(
-                $"No se pudo iniciar el Firmador Local en el puerto {Program.PuertoServicioLocal} — ¿ya hay una instancia corriendo?\n\n{ex.Message}",
+                $"No se pudo iniciar el Firmador Local en el puerto {_puerto} — ¿ya hay una instancia corriendo, o el puerto está ocupado por otra app?\n\n" +
+                $"Prueba con otro puerto: SecureSignFirmadorLocal.exe --puerto <número>\n\n{ex.Message}",
                 "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Salir();
             return;
         }
 
-        Console.WriteLine($"Firmador Local activo — escuchando en http://127.0.0.1:{Program.PuertoServicioLocal}/");
+        Console.WriteLine($"Firmador Local activo — escuchando en http://127.0.0.1:{_puerto}/");
         _ = EscucharAsync();
     }
 
@@ -115,7 +124,7 @@ internal sealed class ServicioLocal : ApplicationContext
 
             if (ruta == "/ping" && contexto.Request.HttpMethod == "GET")
             {
-                await ResponderJsonAsync(respuesta, 200, new { status = "ok" });
+                await ResponderJsonAsync(respuesta, 200, new { status = "ok", puerto = _puerto });
                 return;
             }
 
