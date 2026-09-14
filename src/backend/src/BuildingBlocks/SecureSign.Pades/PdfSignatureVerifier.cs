@@ -108,14 +108,33 @@ public static class PdfSignatureVerifier
             int inicioHex = texto.IndexOf('<', idxContents) + 1;
             int finHex = texto.IndexOf('>', inicioHex);
             if (inicioHex <= 0 || finHex < 0)
-                return new ResultadoVerificacionPades(false, null, null, null, null,"No se pudo parsear el valor hexadecimal de /Contents.");
+                return new ResultadoVerificacionPades(false, null, null, null, null, "No se pudo parsear el valor hexadecimal de /Contents.");
 
-            string hex = texto.Substring(inicioHex, finHex - inicioHex).TrimEnd('0');
-            if (hex.Length % 2 != 0) hex += "0";
-            if (hex.Length == 0)
-                return new ResultadoVerificacionPades(false, null, null, null, null,"/Contents está vacío — no es una firma real, es un campo sin firmar.");
+            // El campo /Contents reserva un ANCHO FIJO de dígitos hex (ver
+            // PdfSignaturePlaceholder.CapacidadCmsBytes) y el CMS real solo
+            // ocupa el principio — el resto queda relleno de ceros. NO se
+            // puede recuperar dónde termina el CMS real recortando ceros
+            // finales del texto (TrimEnd('0') — enfoque usado antes): un CMS
+            // real cuyo último byte termina en un nibble '0' (1 de cada 16,
+            // en la práctica ~1 de cada 15-20 firmas en documentos con
+            // varios firmantes) pierde esos bytes genuinos y deja de
+            // analizarse — bug real encontrado por la suite de pruebas
+            // automatizada, ver RUNBOOK.md 12.15. El CMS es DER, así que su
+            // propia cabecera de longitud (ISO/IEC 8825-1 §8.1.3) dice
+            // exactamente cuántos bytes ocupa — se usa eso, nunca una
+            // heurística sobre el texto.
+            byte[] bytesReservados;
+            try { bytesReservados = Convert.FromHexString(texto.Substring(inicioHex, finHex - inicioHex)); }
+            catch (FormatException) { return new ResultadoVerificacionPades(false, null, null, null, null, "El valor de /Contents no es hexadecimal válido."); }
 
-            byte[] cms = Convert.FromHexString(hex);
+            if (bytesReservados.Length == 0 || bytesReservados[0] == 0x00)
+                return new ResultadoVerificacionPades(false, null, null, null, null, "/Contents está vacío — no es una firma real, es un campo sin firmar.");
+
+            byte[]? cmsRecortado = RecortarPorLongitudDer(bytesReservados);
+            if (cmsRecortado is null)
+                return new ResultadoVerificacionPades(false, null, null, null, null, "El contenido de /Contents no tiene una estructura DER válida (no es un CMS reconocible).");
+
+            byte[] cms = cmsRecortado;
 
             var datosFirmados = new CmsSignedData(new CmsProcessableByteArray(contenidoCubierto), cms);
             var firmantes = datosFirmados.GetSignerInfos().GetSigners();
@@ -157,6 +176,45 @@ public static class PdfSignatureVerifier
     /// tanto la forma literal <c>(...)</c> como la hexadecimal
     /// <c>&lt;FEFF...&gt;</c> (UTF-16BE con BOM) que usa el lector propio.
     /// </summary>
+    /// <summary>
+    /// Recorta un buffer que empieza con un valor DER (aquí, siempre un CMS
+    /// ContentInfo — una SEQUENCE) a su longitud REAL, leyendo su propia
+    /// cabecera de longitud (ISO/IEC 8825-1 §8.1.3: forma corta de un solo
+    /// byte &lt;0x80, o forma larga 0x80|N seguida de N bytes big-endian) en
+    /// vez de adivinar dónde termina por el contenido — ver comentario en el
+    /// llamador. Devuelve null si no parece un DER válido (tag distinto de
+    /// SEQUENCE, longitud indefinida/no soportada, o longitud declarada que
+    /// excede el buffer disponible).
+    /// </summary>
+    private static byte[]? RecortarPorLongitudDer(byte[] buffer)
+    {
+        if (buffer.Length < 2 || buffer[0] != 0x30) return null; // 0x30 = SEQUENCE (constructed) — todo ContentInfo/CMS empieza así.
+
+        int p = 1;
+        int primerByteLongitud = buffer[p++];
+        int longitudContenido;
+
+        if (primerByteLongitud < 0x80)
+        {
+            longitudContenido = primerByteLongitud;
+        }
+        else
+        {
+            int numOctetos = primerByteLongitud & 0x7F;
+            if (numOctetos is 0 or > 4) return null; // longitud indefinida (BER, no DER) o irrazonablemente grande — nunca la produce este sistema.
+            if (p + numOctetos > buffer.Length) return null;
+
+            longitudContenido = 0;
+            for (int i = 0; i < numOctetos; i++)
+                longitudContenido = (longitudContenido << 8) | buffer[p++];
+        }
+
+        long longitudTotal = p + (long)longitudContenido;
+        if (longitudTotal <= 0 || longitudTotal > buffer.Length) return null;
+
+        return buffer[..(int)longitudTotal];
+    }
+
     private static string? ExtraerCadenaPdf(string texto, string clave, int limiteSuperior)
     {
         int cuentaAtras = Math.Min(limiteSuperior, 4000);
