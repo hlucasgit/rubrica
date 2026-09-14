@@ -14,17 +14,23 @@ namespace SecureSign.Pades;
 /// <param name="InstanteFirmaDeclarado">
 /// El valor de /M de este /Sig, si se pudo parsear — el instante que el
 /// FIRMANTE declara haber firmado. NO está probado por una autoridad de
-/// sellado de tiempo (no hay TSA todavía — ver RUNBOOK.md 12.9 y el
-/// hallazgo P0-06/TSA del informe de preauditoría): es la mejor
-/// aproximación disponible al instante de firma, pero SecureSign.Validator
-/// debe tratarlo explícitamente como no confiable (ver
-/// ResultadoValidacionFirmaPades.InstanteFirmaConfiable).
+/// sellado de tiempo — es la mejor aproximación disponible cuando no hay un
+/// sello de tiempo real embebido (ver <see cref="TokenTsaDer"/>), y aun
+/// cuando lo hay, SecureSign.Validator decide cuál de los dos usar.
+/// </param>
+/// <param name="TokenTsaDer">
+/// El TimeStampToken RFC 3161 embebido en el CMS (DER-encoded), si lo hay —
+/// ver SecureSign.Pades.CmsBuilder.AgregarSelloTiempo/ExtraerSelloTiempo y
+/// RUNBOOK.md 12.14. null si esta firma es solo PAdES-B (sin sello de
+/// tiempo). Que exista NO implica por sí solo que sea confiable — eso lo
+/// decide SecureSign.Tsa.VerificadorTokenTsa.
 /// </param>
 public sealed record ResultadoVerificacionPades(
     bool Valido,
     string? NombreFirma,
     X509Certificate2? Certificado,
     DateTimeOffset? InstanteFirmaDeclarado,
+    byte[]? TokenTsaDer,
     string? Error);
 
 /// <summary>
@@ -70,7 +76,7 @@ public static class PdfSignatureVerifier
     {
         var todas = VerificarTodas(pdf);
         return todas.Count == 0
-            ? new ResultadoVerificacionPades(false, null, null, null, "El documento no contiene ningún diccionario /Sig con /ByteRange.")
+            ? new ResultadoVerificacionPades(false, null, null, null, null,"El documento no contiene ningún diccionario /Sig con /ByteRange.")
             : todas[^1];
     }
 
@@ -81,13 +87,13 @@ public static class PdfSignatureVerifier
             int inicioArray = texto.IndexOf('[', idxByteRange);
             int finArray = texto.IndexOf(']', inicioArray);
             if (inicioArray < 0 || finArray < 0)
-                return new ResultadoVerificacionPades(false, null, null, null, "No se pudo parsear el array de /ByteRange.");
+                return new ResultadoVerificacionPades(false, null, null, null, null,"No se pudo parsear el array de /ByteRange.");
 
             long[] br = Array.ConvertAll(
                 texto.Substring(inicioArray + 1, finArray - inicioArray - 1).Split(' ', StringSplitOptions.RemoveEmptyEntries),
                 long.Parse);
             if (br.Length != 4)
-                return new ResultadoVerificacionPades(false, null, null, null, $"/ByteRange tiene {br.Length} valores, se esperaban 4.");
+                return new ResultadoVerificacionPades(false, null, null, null, null,$"/ByteRange tiene {br.Length} valores, se esperaban 4.");
 
             byte[] tramoA = pdf[(int)br[0]..(int)(br[0] + br[1])];
             byte[] tramoB = pdf[(int)br[2]..(int)(br[2] + br[3])];
@@ -97,24 +103,24 @@ public static class PdfSignatureVerifier
 
             int idxContents = texto.IndexOf("/Contents", idxByteRange, StringComparison.Ordinal);
             if (idxContents < 0)
-                return new ResultadoVerificacionPades(false, null, null, null, "No se encontró /Contents asociado a este /ByteRange.");
+                return new ResultadoVerificacionPades(false, null, null, null, null,"No se encontró /Contents asociado a este /ByteRange.");
 
             int inicioHex = texto.IndexOf('<', idxContents) + 1;
             int finHex = texto.IndexOf('>', inicioHex);
             if (inicioHex <= 0 || finHex < 0)
-                return new ResultadoVerificacionPades(false, null, null, null, "No se pudo parsear el valor hexadecimal de /Contents.");
+                return new ResultadoVerificacionPades(false, null, null, null, null,"No se pudo parsear el valor hexadecimal de /Contents.");
 
             string hex = texto.Substring(inicioHex, finHex - inicioHex).TrimEnd('0');
             if (hex.Length % 2 != 0) hex += "0";
             if (hex.Length == 0)
-                return new ResultadoVerificacionPades(false, null, null, null, "/Contents está vacío — no es una firma real, es un campo sin firmar.");
+                return new ResultadoVerificacionPades(false, null, null, null, null,"/Contents está vacío — no es una firma real, es un campo sin firmar.");
 
             byte[] cms = Convert.FromHexString(hex);
 
             var datosFirmados = new CmsSignedData(new CmsProcessableByteArray(contenidoCubierto), cms);
             var firmantes = datosFirmados.GetSignerInfos().GetSigners();
             if (firmantes.Count == 0)
-                return new ResultadoVerificacionPades(false, null, null, null, "El CMS no contiene ningún SignerInfo.");
+                return new ResultadoVerificacionPades(false, null, null, null, null, "El CMS no contiene ningún SignerInfo.");
 
             var firmante = firmantes.First();
             var certificadosBc = datosFirmados.GetCertificates().EnumerateMatches(firmante.SignerID);
@@ -132,14 +138,15 @@ public static class PdfSignatureVerifier
             // entender ambos formatos, no solo el literal.
             string? nombreFirma = ExtraerCadenaPdf(texto, "/Name", idxContents);
             DateTimeOffset? instanteFirma = ParsearFechaPdf(ExtraerCadenaPdf(texto, "/M", idxContents));
+            byte[]? tokenTsa = CmsBuilder.ExtraerSelloTiempo(cms);
 
             return valido
-                ? new ResultadoVerificacionPades(true, nombreFirma, certificadoNet, instanteFirma, null)
-                : new ResultadoVerificacionPades(false, nombreFirma, certificadoNet, instanteFirma, "El CMS no verifica contra su propio certificado (message-digest o firma inválida).");
+                ? new ResultadoVerificacionPades(true, nombreFirma, certificadoNet, instanteFirma, tokenTsa, null)
+                : new ResultadoVerificacionPades(false, nombreFirma, certificadoNet, instanteFirma, tokenTsa, "El CMS no verifica contra su propio certificado (message-digest o firma inválida).");
         }
         catch (Exception ex)
         {
-            return new ResultadoVerificacionPades(false, null, null, null, $"Error al procesar esta firma: {ex.Message}");
+            return new ResultadoVerificacionPades(false, null, null, null, null,$"Error al procesar esta firma: {ex.Message}");
         }
     }
 

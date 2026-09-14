@@ -14,21 +14,34 @@ namespace SecureSign.Validator;
 /// un auditor pueda revisar exactamente cuál comprobación falló, si alguna.
 /// </summary>
 /// <param name="InstanteFirmaConfiable">
-/// Siempre false en esta versión: <paramref name="InstanteFirmaDeclarado"/>
-/// es el valor de /M tal como lo declaró el propio firmante, NO un instante
-/// probado por una autoridad de sellado de tiempo (TSA) independiente — ver
-/// RUNBOOK.md 12.9 e ISellosTiempoProvider (sin implementación real
-/// todavía). Se valida la confianza del certificado EN ese instante
-/// declarado (mejor aproximación disponible hoy), pero el resultado nunca
-/// debe presentarse como "validación de largo plazo" (PAdES-LT/LTA) hasta
-/// que exista una TSA real.
+/// Siempre false en esta versión, INCLUSO cuando <paramref name="InstanteSelloTiempo"/>
+/// tiene valor: se implementó un cliente RFC 3161 real (ver
+/// SecureSign.Tsa.ClienteTsaRfc3161, RUNBOOK.md 12.14) que sí produce y
+/// verifica sellos de tiempo genuinos — pero esa verificación solo confirma
+/// que el token no fue alterado DESPUÉS de emitido, no que la propia TSA
+/// emisora sea, en sí misma, una autoridad acreditada/confiable (no hay
+/// todavía un almacén de raíces de confianza para TSAs, análogo al de
+/// SecureSign.Trust para certificados de firmante). Por eso
+/// <paramref name="InstanteFirmaDeclarado"/> (el /M autodeclarado) sigue
+/// siendo el instante que se usa para validar vigencia/revocación del
+/// certificado — <paramref name="InstanteSelloTiempo"/> es información
+/// adicional expuesta para auditoría, no todavía la base de la validación.
 /// </param>
+/// <param name="InstanteSelloTiempo">
+/// El <c>genTime</c> de un TimeStampToken RFC 3161 real embebido en la
+/// firma (PAdES-T), SOLO si ese token está presente y su firma CMS interna
+/// verifica contra su propio certificado — null si la firma es PAdES-B
+/// (sin sello) o si el token embebido está corrupto/alterado.
+/// </param>
+/// <param name="SelloTiempoAutoridad">El firmante (Subject DN) del certificado de la TSA que emitió el sello, si lo hay.</param>
 public sealed record ResultadoValidacionFirmaPades(
     string? NombreFirma,
     bool FirmaCriptograficaValida,
     X509Certificate2? Certificado,
     DateTimeOffset? InstanteFirmaDeclarado,
     bool InstanteFirmaConfiable,
+    DateTimeOffset? InstanteSelloTiempo,
+    string? SelloTiempoAutoridad,
     ResultadoValidacionCertificado? ValidacionCertificado,
     IReadOnlyList<string> Evidencia,
     string? Error)
@@ -50,6 +63,8 @@ public sealed record ResultadoValidacionFirmaPades(
         Certificado: null,
         InstanteFirmaDeclarado: null,
         InstanteFirmaConfiable: false,
+        InstanteSelloTiempo: null,
+        SelloTiempoAutoridad: null,
         ValidacionCertificado: null,
         Evidencia: [error],
         Error: error);

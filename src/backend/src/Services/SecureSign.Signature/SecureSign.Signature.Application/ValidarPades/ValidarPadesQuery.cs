@@ -20,6 +20,8 @@ public sealed record FirmaValidadaDto(
     DateTimeOffset? CertificadoVigenteHasta,
     DateTimeOffset? InstanteFirmaDeclarado,
     bool InstanteFirmaConfiable,
+    DateTimeOffset? InstanteSelloTiempo,
+    string? SelloTiempoAutoridad,
     bool CertificadoVigente,
     bool CadenaValida,
     bool RaizConfiableIofe,

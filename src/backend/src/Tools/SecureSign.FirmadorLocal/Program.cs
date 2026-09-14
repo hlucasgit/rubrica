@@ -9,6 +9,7 @@ using Microsoft.Win32;
 using Net.Pkcs11Interop.Common;
 using Net.Pkcs11Interop.HighLevelAPI;
 using SecureSign.Pades;
+using SecureSign.Tsa;
 
 namespace SecureSign.FirmadorLocal;
 
@@ -353,6 +354,7 @@ internal static class Program
                 byte[] cms = CmsBuilder.Firmar(
                     preparado.ContenidoCubierto, certificado, cadenaCertificacion: null,
                     datos => FirmarConTarjeta(elegido.SlotId, elegido.CkaId, SHA256.HashData(datos), pin));
+                cms = await IntentarAgregarSelloTiempoAsync(cms);
                 documentoPadesBase64 = Convert.ToBase64String(PdfSignaturePlaceholder.Inyectar(preparado, cms));
             }
             catch (Exception ex)
@@ -385,6 +387,39 @@ internal static class Program
         else MostrarExito();
 
         return new ResultadoFirma(true, "Documento firmado correctamente.", JsonSerializer.Deserialize<JsonElement>(textoRespuesta));
+    }
+
+    // ---------- Sello de tiempo RFC 3161 (PAdES-T, ver RUNBOOK.md 12.14) ----------
+
+    /// <summary>TSA pública por defecto (DigiCert, sin autenticación) — configurable vía SECURESIGN_TSA_URL. Ver ProveedorSellosTiempoRfc3161 para el equivalente del lado servidor.</summary>
+    private static string UrlTsa =>
+        Environment.GetEnvironmentVariable("SECURESIGN_TSA_URL") ?? "http://timestamp.digicert.com";
+
+    private static readonly HttpClient HttpTsa = new();
+
+    /// <summary>
+    /// Intenta convertir un CMS/CAdES-BES (PAdES-B) en CAdES-T (PAdES-T)
+    /// real, pidiendo un sello de tiempo RFC 3161 sobre el hash de la propia
+    /// firma recién calculada. DELIBERADAMENTE best-effort: el PAdES-T es
+    /// una mejora sobre el PAdES-B ya válido y completo (nunca declarado
+    /// como el formato mínimo exigido, a diferencia del PAdES-B mismo — ver
+    /// hallazgo P0-03), así que si la TSA no responde (red, timeout, TSA
+    /// caída) se sigue con el CMS sin sello en vez de abortar la firma
+    /// completa por un servicio que ni siquiera es de SecureSign.
+    /// </summary>
+    private static async Task<byte[]> IntentarAgregarSelloTiempoAsync(byte[] cms)
+    {
+        try
+        {
+            byte[] hashFirma = SHA256.HashData(CmsBuilder.ObtenerBytesFirma(cms));
+            var cliente = new ClienteTsaRfc3161(HttpTsa);
+            var sello = await cliente.SellarAsync(hashFirma, UrlTsa);
+            return CmsBuilder.AgregarSelloTiempo(cms, sello.TokenDer);
+        }
+        catch (Exception)
+        {
+            return cms;
+        }
     }
 
     // ---------- PKCS#11 (misma lógica probada en ProveedorCriptograficoPkcs11 / DnieProbe) ----------

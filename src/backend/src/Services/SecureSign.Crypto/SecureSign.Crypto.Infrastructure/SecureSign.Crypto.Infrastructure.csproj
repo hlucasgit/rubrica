@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SecureSign.Crypto.Domain\SecureSign.Crypto.Domain.csproj" />
     <ProjectReference Include="..\SecureSign.Crypto.Application\SecureSign.Crypto.Application.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\SecureSign.Tsa\SecureSign.Tsa.csproj" />
   </ItemGroup>
 
   <ItemGroup>

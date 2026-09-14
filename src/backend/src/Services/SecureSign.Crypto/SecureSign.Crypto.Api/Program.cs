@@ -2,6 +2,7 @@ using SecureSign.Crypto.Domain;
 using SecureSign.Crypto.Infrastructure;
 using SecureSign.Crypto.Infrastructure.Pkcs11;
 using SecureSign.Shared.Auth;
+using SecureSign.Tsa;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +29,13 @@ else
     // ADVERTENCIA: proveedor de software solo para desarrollo. Ver clase para detalle.
     builder.Services.AddSingleton<IProveedorCriptografico, ProveedorCriptograficoSoftware>();
 }
+
+// Sellos de tiempo RFC 3161 reales (ver informe de preauditoría
+// INDECOPI/IOFE, hallazgo P1, y RUNBOOK.md 12.14) — por defecto contra la
+// TSA pública de DigiCert, configurable vía Tsa:UrlTsa.
+builder.Services.Configure<OpcionesTsa>(builder.Configuration.GetSection(OpcionesTsa.SeccionConfiguracion));
+builder.Services.AddHttpClient<ClienteTsaRfc3161>();
+builder.Services.AddSingleton<ISellosTiempoProvider, ProveedorSellosTiempoRfc3161>();
 
 var app = builder.Build();
 

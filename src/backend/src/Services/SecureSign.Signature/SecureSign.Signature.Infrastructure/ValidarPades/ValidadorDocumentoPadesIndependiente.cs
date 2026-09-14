@@ -27,6 +27,8 @@ public sealed class ValidadorDocumentoPadesIndependiente(ValidadorDocumentoPades
             CertificadoVigenteHasta: f.Certificado is null ? null : new DateTimeOffset(f.Certificado.NotAfter),
             InstanteFirmaDeclarado: f.InstanteFirmaDeclarado,
             InstanteFirmaConfiable: f.InstanteFirmaConfiable,
+            InstanteSelloTiempo: f.InstanteSelloTiempo,
+            SelloTiempoAutoridad: f.SelloTiempoAutoridad,
             CertificadoVigente: vc?.CertificadoVigente ?? false,
             CadenaValida: vc?.CadenaValida ?? false,
             RaizConfiableIofe: vc?.RaizConfiableIofe ?? false,
