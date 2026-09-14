@@ -1,0 +1,37 @@
+{
+  "solution": {
+    "path": "SecureSign.sln",
+    "projects": [
+      "src\\BuildingBlocks\\SecureSign.Domain\\SecureSign.Domain.csproj",
+      "src\\BuildingBlocks\\SecureSign.Application\\SecureSign.Application.csproj",
+      "src\\BuildingBlocks\\SecureSign.Shared.Auth\\SecureSign.Shared.Auth.csproj",
+      "src\\BuildingBlocks\\SecureSign.Pades\\SecureSign.Pades.csproj",
+      "src\\BuildingBlocks\\SecureSign.Trust\\SecureSign.Trust.csproj",
+      "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Domain\\SecureSign.Documents.Domain.csproj",
+      "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Application\\SecureSign.Documents.Application.csproj",
+      "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Infrastructure\\SecureSign.Documents.Infrastructure.csproj",
+      "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Api\\SecureSign.Documents.Api.csproj",
+      "src\\Services\\SecureSign.Signature\\SecureSign.Signature.Domain\\SecureSign.Signature.Domain.csproj",
+      "src\\Services\\SecureSign.Signature\\SecureSign.Signature.Application\\SecureSign.Signature.Application.csproj",
+      "src\\Services\\SecureSign.Signature\\SecureSign.Signature.Infrastructure\\SecureSign.Signature.Infrastructure.csproj",
+      "src\\Services\\SecureSign.Signature\\SecureSign.Signature.Api\\SecureSign.Signature.Api.csproj",
+      "src\\Services\\SecureSign.Crypto\\SecureSign.Crypto.Domain\\SecureSign.Crypto.Domain.csproj",
+      "src\\Services\\SecureSign.Crypto\\SecureSign.Crypto.Application\\SecureSign.Crypto.Application.csproj",
+      "src\\Services\\SecureSign.Crypto\\SecureSign.Crypto.Infrastructure\\SecureSign.Crypto.Infrastructure.csproj",
+      "src\\Services\\SecureSign.Crypto\\SecureSign.Crypto.Api\\SecureSign.Crypto.Api.csproj",
+      "src\\Services\\SecureSign.Evidence\\SecureSign.Evidence.Domain\\SecureSign.Evidence.Domain.csproj",
+      "src\\Services\\SecureSign.Evidence\\SecureSign.Evidence.Application\\SecureSign.Evidence.Application.csproj",
+      "src\\Services\\SecureSign.Evidence\\SecureSign.Evidence.Infrastructure\\SecureSign.Evidence.Infrastructure.csproj",
+      "src\\Services\\SecureSign.Evidence\\SecureSign.Evidence.Api\\SecureSign.Evidence.Api.csproj",
+      "src\\Services\\SecureSign.Identity\\SecureSign.Identity.Domain\\SecureSign.Identity.Domain.csproj",
+      "src\\Services\\SecureSign.Identity\\SecureSign.Identity.Application\\SecureSign.Identity.Application.csproj",
+      "src\\Services\\SecureSign.Identity\\SecureSign.Identity.Infrastructure\\SecureSign.Identity.Infrastructure.csproj",
+      "src\\Services\\SecureSign.Identity\\SecureSign.Identity.Api\\SecureSign.Identity.Api.csproj",
+      "src\\Services\\SecureSign.Audit\\SecureSign.Audit.Domain\\SecureSign.Audit.Domain.csproj",
+      "src\\Services\\SecureSign.Audit\\SecureSign.Audit.Application\\SecureSign.Audit.Application.csproj",
+      "src\\Gateway\\SecureSign.Gateway\\SecureSign.Gateway.csproj",
+      "src\\Migrator\\SecureSign.Migrator.csproj",
+      "tests\\SecureSign.UnitTests\\SecureSign.UnitTests.csproj"
+    ]
+  }
+}

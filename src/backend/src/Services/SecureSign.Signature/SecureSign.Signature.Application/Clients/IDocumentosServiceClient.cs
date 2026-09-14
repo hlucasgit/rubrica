@@ -1,6 +1,6 @@
 namespace SecureSign.Signature.Application.Clients;
 
-public sealed record DocumentoRemoto(Guid IdDocumento, string HashSha256, string Estado);
+public sealed record DocumentoRemoto(Guid IdDocumento, string HashSha256, string Estado, string TipoContenido);
 
 public sealed record ContenidoDocumentoRemoto(byte[] Contenido, string TipoContenido, string NombreArchivo);
 

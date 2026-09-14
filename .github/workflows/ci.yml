@@ -1,13 +1,14 @@
 name: CI — build, test y migraciones
 
-# Pipeline de referencia: valida que la solución compila, que las 30 pruebas
-# unitarias pasan, y que las migraciones de EF Core de los 4 servicios con
-# estado se aplican correctamente contra un PostgreSQL real (servicio
-# efímero de este job) usando SecureSign.Migrator — es decir, el mismo paso
-# explícito que en producción correría antes de desplegar cada servicio,
-# ahora ejecutado como verificación en cada push/PR en vez de solo
-# documentado. Ver src/backend/README.md, "Siguiente paso lógico de
-# desarrollo".
+# Dos jobs separados a propósito (ver informe de preauditoría INDECOPI/IOFE,
+# hallazgo P0-04): el backend (servicios ASP.NET Core, todos net8.0 puro)
+# compila y corre en Ubuntu, pero SecureSign.FirmadorLocal es
+# net8.0-windows + WinForms — NUNCA compila en un runner Linux
+# (NETSDK1100), así que antes rompía el build de main con solo tocar
+# CUALQUIER archivo del repo, sin relación con el Firmador. Se usa un
+# solution filter (SecureSign.Backend.slnf) para que el job de Linux nunca
+# intente tocar ese proyecto, y un job aparte en windows-latest valida que
+# el Firmador siga compilando.
 
 on:
   push:
@@ -15,7 +16,7 @@ on:
   pull_request:
 
 jobs:
-  build-test-migrate:
+  backend-build-test-migrate:
     runs-on: ubuntu-latest
 
     services:
@@ -40,10 +41,10 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restaurar
-        run: dotnet restore src/backend/SecureSign.sln
+        run: dotnet restore src/backend/SecureSign.Backend.slnf
 
       - name: Compilar
-        run: dotnet build src/backend/SecureSign.sln --no-restore --configuration Release
+        run: dotnet build src/backend/SecureSign.Backend.slnf --no-restore --configuration Release
 
       - name: Pruebas unitarias
         run: dotnet test src/backend/tests/SecureSign.UnitTests/SecureSign.UnitTests.csproj --no-build --configuration Release
@@ -72,3 +73,23 @@ jobs:
           ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Signature" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- signature
           ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Evidence" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- evidence
           ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Identity" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- identity
+
+  firmador-local-build:
+    # Solo compila (WinForms + PKCS11Interop exigen Windows) — validar que
+    # el Firmador Local (incluida la parte nueva de SecureSign.Pades) no se
+    # rompe con cambios en main, sin bloquear el pipeline del backend con
+    # un requisito de runner Windows en cada PR trivial del resto del repo.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restaurar
+        run: dotnet restore src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj
+
+      - name: Compilar
+        run: dotnet build src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj --no-restore --configuration Release

@@ -1,7 +1,10 @@
+using System.Security.Cryptography.X509Certificates;
 using MediatR;
 using SecureSign.Domain.Primitives;
 using SecureSign.Identity.Domain;
+using SecureSign.Pades;
 using SecureSign.Signature.Application.Clients;
+using SecureSign.Signature.Application.Confianza;
 using SecureSign.Signature.Application.FirmarDocumento;
 using SecureSign.Signature.Domain;
 
@@ -20,7 +23,8 @@ public sealed class FirmarLocalHandler(
     ISolicitudFirmaRepository repositorio,
     IIdentidadServiceClient identidad,
     IDocumentosServiceClient documentos,
-    IEvidenciasServiceClient evidencias)
+    IEvidenciasServiceClient evidencias,
+    IValidadorConfianzaFirmante validadorConfianza)
     : IRequestHandler<FirmarLocalCommand, Result<FirmarDocumentoResponse>>
 {
     public async Task<Result<FirmarDocumentoResponse>> Handle(FirmarLocalCommand request, CancellationToken ct)
@@ -70,6 +74,51 @@ public sealed class FirmarLocalHandler(
         if (!firmaValida)
             return Result.Fallido<FirmarDocumentoResponse>("La firma no corresponde al hash actual del documento y/o al certificado indicado.");
 
+        // Motor de confianza IOFE (hallazgo P0-01 del informe de
+        // preauditoría): la operación matemática de arriba solo prueba que
+        // la firma corresponde a ESTE certificado — no que ese certificado
+        // fuera, en este instante, vigente, no revocado, de propósito de
+        // firma y perteneciente a una cadena acreditada por INDECOPI. Sin
+        // esto, un certificado revocado o ajeno a la IOFE firmaría igual de
+        // "válido" que un DNIe real. Ver RUNBOOK.md 12.9.
+        var confianzaCertificado = await validadorConfianza.ValidarAsync(certificado, DateTimeOffset.UtcNow, ct);
+        if (!confianzaCertificado.Confiable)
+            return Result.Fallido<FirmarDocumentoResponse>(
+                "El certificado del firmante no pasó la validación de confianza IOFE: " + string.Join(" | ", confianzaCertificado.Evidencia));
+
+        // Fail closed (ver informe de preauditoría INDECOPI/IOFE, hallazgo
+        // P0-03): si el documento es PDF, el Firmador Local DEBE haber
+        // producido un PAdES real y criptográficamente válido — y ese
+        // certificado debe ser el MISMO que acaba de autorizar la firma
+        // desacoplada de arriba. Se verifica ANTES de tocar el estado de la
+        // solicitud, para no dejar nunca un flujo marcado "Firmado" con la
+        // promesa de un PAdES que en realidad no existe o no es válido.
+        byte[]? documentoPades = null;
+        bool esPdf = documento.TipoContenido.Contains("pdf", StringComparison.OrdinalIgnoreCase);
+        if (esPdf)
+        {
+            if (string.IsNullOrEmpty(request.DocumentoPadesBase64))
+                return Result.Fallido<FirmarDocumentoResponse>(
+                    "Este documento es PDF y requiere una firma PAdES real incrustada, pero el Firmador Local no la envió.");
+
+            try
+            {
+                documentoPades = Convert.FromBase64String(request.DocumentoPadesBase64);
+            }
+            catch (FormatException)
+            {
+                return Result.Fallido<FirmarDocumentoResponse>("El PDF con PAdES recibido no es Base64 válido.");
+            }
+
+            var verificacionPades = PdfSignatureVerifier.VerificarUltima(documentoPades);
+            if (!verificacionPades.Valido)
+                return Result.Fallido<FirmarDocumentoResponse>($"La firma PAdES incrustada no es válida: {verificacionPades.Error}");
+
+            if (verificacionPades.Certificado is null || !CertificadoCoincide(verificacionPades.Certificado, certificado))
+                return Result.Fallido<FirmarDocumentoResponse>(
+                    "El certificado incrustado en el PAdES no coincide con el certificado de la firma desacoplada.");
+        }
+
         var confirmacion = solicitud.ConfirmarFirma(request.FlujoFirmaId);
         if (!confirmacion.EsExitoso) return Result.Fallido<FirmarDocumentoResponse>(confirmacion.Error!);
 
@@ -78,25 +127,25 @@ public sealed class FirmarLocalHandler(
         if (solicitud.Estado == EstadoSolicitudFirma.Firmado)
             await documentos.MarcarFirmadoAsync(solicitud.DocumentoId, ct);
 
-        await evidencias.RegistrarAsync(solicitud.DocumentoId, "Firma", request.DatosContextuales, ct: ct);
-
-        if (!string.IsNullOrEmpty(request.DocumentoPadesBase64))
+        if (documentoPades is not null)
         {
-            try
-            {
-                await documentos.GuardarDocumentoFirmadoPadesAsync(
-                    solicitud.DocumentoId, Convert.FromBase64String(request.DocumentoPadesBase64), ct);
-            }
-            catch (Exception ex) when (ex is FormatException or HttpRequestException)
-            {
-                // El PDF con PAdES es un extra sobre la firma ya validada arriba
-                // (la que de verdad autoriza el flujo) — si viene corrupto o el
-                // Servicio Documental no responde, no se aborta la firma, solo
-                // se pierde el sello incrustado y GET /firmado sigue sirviendo
-                // el original (ver RUNBOOK.md 12.8).
-            }
+            // Ya validado arriba matemáticamente — si esto falla es un
+            // problema de infraestructura del Servicio Documental, no de la
+            // firma en sí; no se revierte la confirmación ya persistida
+            // (la máquina de estados de SolicitudFirma no contempla
+            // deshacer una firma) pero sí queda registrado para investigar.
+            try { await documentos.GuardarDocumentoFirmadoPadesAsync(solicitud.DocumentoId, documentoPades, ct); }
+            catch (HttpRequestException) { /* ver limitación en RUNBOOK.md 12.8 */ }
         }
 
+        await evidencias.RegistrarAsync(solicitud.DocumentoId, "Firma", request.DatosContextuales, ct: ct);
+
         return Result.Exitoso(new FirmarDocumentoResponse(solicitud.Estado.ToString(), request.Algoritmo, request.FirmaBase64));
+    }
+
+    private static bool CertificadoCoincide(X509Certificate2 delPades, byte[] delFlujo)
+    {
+        try { return delPades.RawData.AsSpan().SequenceEqual(delFlujo); }
+        catch { return false; }
     }
 }

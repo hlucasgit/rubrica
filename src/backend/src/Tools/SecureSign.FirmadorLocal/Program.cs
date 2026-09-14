@@ -248,30 +248,51 @@ internal static class Program
 
         var elegido = candidatos[indiceElegido];
 
+        // El diccionario /Sig se prepara ANTES de firmar nada — así, si algo
+        // falla (documento corrupto, PdfSharpCore no puede reescribirlo,
+        // etc.), se descubre sin haber gastado ninguna operación con la
+        // tarjeta. Para PDF, PAdES ya NO es "mejor esfuerzo": si el flujo es
+        // sobre un PDF, el Firmador Local DEBE producir un PAdES real o
+        // abortar por completo (fail closed) — ver informe de preauditoría
+        // INDECOPI/IOFE, hallazgo P0-03. Degradar en silencio a la firma
+        // desacoplada dejaría un flujo marcado "Firmado" sin que exista
+        // realmente el PAdES que el propio Firmador Local promete generar.
+        bool esPdf = tipoContenido.Contains("pdf", StringComparison.OrdinalIgnoreCase);
+        ResultadoPreparacionPades? preparadoPades = null;
+        string? nombreFirmante = null;
+        if (esPdf)
+        {
+            using var certificadoParaNombre = new X509Certificate2(elegido.CertDer);
+            nombreFirmante = certificadoParaNombre.GetNameInfo(X509NameType.SimpleName, false);
+            try
+            {
+                preparadoPades = PdfSignaturePlaceholder.Preparar(contenido, nombreFirmante, "Firma electrónica", DateTimeOffset.UtcNow);
+            }
+            catch (Exception ex)
+            {
+                return new ResultadoFirma(false,
+                    $"No se pudo preparar la firma PAdES para este PDF — se abortó la operación sin firmar nada (ver RUNBOOK.md 12.8). Detalle: {ex.Message}", null);
+            }
+        }
+
         var firma = FirmarConTarjeta(elegido.SlotId, elegido.CkaId, hash, pin);
 
-        // Además de la firma "desacoplada" clásica (arriba — la que de verdad
-        // autoriza el flujo y queda auditada), incrustamos una firma PAdES
-        // real en el propio PDF: mismo certificado, misma tarjeta, un
-        // segundo Sign() dentro de la misma sesión (no pide el PIN de
-        // nuevo). Si algo falla aquí (documento no es PDF, está corrupto,
-        // etc.) seguimos igual con la firma clásica — ver RUNBOOK.md 12.8.
         string? documentoPadesBase64 = null;
-        if (tipoContenido.Contains("pdf", StringComparison.OrdinalIgnoreCase))
+        if (esPdf && preparadoPades is { } preparado)
         {
             try
             {
                 using var certificado = new X509Certificate2(elegido.CertDer);
-                var preparado = PdfSignaturePlaceholder.Preparar(
-                    contenido, certificado.GetNameInfo(X509NameType.SimpleName, false), "Firma electrónica", DateTimeOffset.UtcNow);
                 byte[] cms = CmsBuilder.Firmar(
                     preparado.ContenidoCubierto, certificado, cadenaCertificacion: null,
                     datos => FirmarConTarjeta(elegido.SlotId, elegido.CkaId, SHA256.HashData(datos), pin));
                 documentoPadesBase64 = Convert.ToBase64String(PdfSignaturePlaceholder.Inyectar(preparado, cms));
             }
-            catch
+            catch (Exception ex)
             {
-                documentoPadesBase64 = null;
+                pin = string.Empty;
+                return new ResultadoFirma(false,
+                    $"La tarjeta ya firmó el hash del documento, pero no se pudo completar la firma PAdES — se abortó SIN enviar nada a SecureSign, para no dejar un flujo marcado como firmado sin PAdES real. Detalle: {ex.Message}", null);
             }
         }
         pin = string.Empty; // no persistir el PIN en memoria más de lo necesario

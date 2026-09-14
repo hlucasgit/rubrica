@@ -1,13 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using SecureSign.Signature.Application.Clients;
+using SecureSign.Signature.Application.Confianza;
 using SecureSign.Signature.Application.CrearSolicitudFirma;
 using SecureSign.Signature.Application.Estampado;
 using SecureSign.Signature.Domain;
 using SecureSign.Signature.Infrastructure;
 using SecureSign.Signature.Infrastructure.Clients;
+using SecureSign.Signature.Infrastructure.Confianza;
 using SecureSign.Signature.Infrastructure.Estampado;
 using SecureSign.Signature.Infrastructure.Persistence;
 using SecureSign.Shared.Auth;
+using SecureSign.Trust;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +28,22 @@ builder.Services.AddDbContext<SignatureDbContext>(options =>
 builder.Services.AddScoped<ISolicitudFirmaRepository, SolicitudFirmaRepositoryEfCore>();
 builder.Services.AddSingleton<IGeneradorUrlFirma, GeneradorUrlFirmaWhiteLabel>();
 builder.Services.AddSingleton<IEstampadorVisualDocumento, EstampadorVisualDocumentoPdf>();
+
+// Motor de confianza IOFE (ver informe de preauditoría INDECOPI/IOFE,
+// hallazgo P0-01, y RUNBOOK.md 12.9): valida vigencia, cadena, acreditación
+// en la TSL de INDECOPI y revocación (OCSP/CRL) del certificado del
+// firmante — nunca solo la operación criptográfica. Las raíces y la TSL se
+// cargan una vez al iniciar desde ConfianzaIofe/ (ver ese .csproj); los tres
+// clientes HTTP hacen llamadas de red reales a RENIEC/INDECOPI.
+builder.Services.AddHttpClient<DescargadorCertificadosIntermedios>();
+builder.Services.AddHttpClient<VerificadorRevocacionCrl>();
+builder.Services.AddHttpClient<VerificadorRevocacionOcsp>();
+builder.Services.AddSingleton(_ => AlmacenRaicesConfiables.CargarDesdeDirectorio(
+    Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "raices")));
+builder.Services.AddSingleton(_ => ListaConfianzaIofe.CargarDesdeArchivo(
+    Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml")));
+builder.Services.AddScoped<ValidadorCertificados>();
+builder.Services.AddScoped<IValidadorConfianzaFirmante, ValidadorConfianzaFirmanteIofe>();
 
 // Clientes HTTP hacia los servicios de dominio de los que depende la
 // orquestación de firma (ver docs/01-arquitectura/arquitectura-general.md

@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SecureSign.Signature.Domain\SecureSign.Signature.Domain.csproj" />
     <ProjectReference Include="..\SecureSign.Signature.Application\SecureSign.Signature.Application.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\SecureSign.Trust\SecureSign.Trust.csproj" />
   </ItemGroup>
 
   <ItemGroup>

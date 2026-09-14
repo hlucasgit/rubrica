@@ -83,6 +83,14 @@ services:
       context: .
       dockerfile: src/Services/SecureSign.Documents/SecureSign.Documents.Api/Dockerfile
     expose: ["8080"]
+    volumes:
+      # AlmacenamientoDocumentalLocal (solo para desarrollo, ver su propio
+      # comentario) escribe en /tmp/securesign-documentos DENTRO del
+      # contenedor — sin este volumen, cada vez que se reconstruye/reinicia
+      # este servicio (algo frecuente en desarrollo) los archivos físicos se
+      # pierden aunque el registro en Postgres siga existiendo, dejando
+      # documentos "huérfanos" que fallan con 404/500 al leer su contenido.
+      - securesign_documentos_local:/tmp/securesign-documentos
     depends_on:
       securesign-documents-migrate:
         condition: service_completed_successfully
@@ -146,3 +154,4 @@ services:
 
 volumes:
   securesign_pg_data:
+  securesign_documentos_local:

@@ -15,6 +15,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Anclas de confianza IOFE (raíces autofirmadas + TSL de INDECOPI) que
+         SecureSign.Trust necesita en tiempo de ejecución — ver
+         ConfianzaIofe/README y RUNBOOK.md 12.9 sobre cómo y cuándo refrescarlas. -->
+    <Content Include="ConfianzaIofe\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SecureSign.Signature.Infrastructure\SecureSign.Signature.Infrastructure.csproj" />
     <ProjectReference Include="..\SecureSign.Signature.Application\SecureSign.Signature.Application.csproj" />
     <ProjectReference Include="..\SecureSign.Signature.Domain\SecureSign.Signature.Domain.csproj" />

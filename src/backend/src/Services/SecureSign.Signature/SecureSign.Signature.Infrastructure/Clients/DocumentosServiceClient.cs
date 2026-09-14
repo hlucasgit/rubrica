@@ -15,7 +15,7 @@ public sealed class DocumentosServiceClient(HttpClient http) : IDocumentosServic
         respuesta.EnsureSuccessStatusCode();
 
         var detalle = await respuesta.Content.ReadFromJsonAsync<DocumentoDetalleResponse>(cancellationToken: ct);
-        return detalle is null ? null : new DocumentoRemoto(detalle.IdDocumento, detalle.HashSha256, detalle.Estado);
+        return detalle is null ? null : new DocumentoRemoto(detalle.IdDocumento, detalle.HashSha256, detalle.Estado, detalle.TipoContenido);
     }
 
     public async Task MarcarFirmadoAsync(Guid documentoId, CancellationToken ct = default)
