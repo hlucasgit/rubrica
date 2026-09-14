@@ -89,6 +89,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureSign.Pades", "src\Bui
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureSign.Trust", "src\BuildingBlocks\SecureSign.Trust\SecureSign.Trust.csproj", "{CB227DCE-F40C-4808-9AA0-0353FEED4BAF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureSign.Validator", "src\BuildingBlocks\SecureSign.Validator\SecureSign.Validator.csproj", "{7A465892-7790-4465-BF3D-3120EC519DAF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -471,6 +473,18 @@ Global
 		{CB227DCE-F40C-4808-9AA0-0353FEED4BAF}.Release|x64.Build.0 = Release|Any CPU
 		{CB227DCE-F40C-4808-9AA0-0353FEED4BAF}.Release|x86.ActiveCfg = Release|Any CPU
 		{CB227DCE-F40C-4808-9AA0-0353FEED4BAF}.Release|x86.Build.0 = Release|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Debug|x64.Build.0 = Debug|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Debug|x86.Build.0 = Debug|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Release|x64.ActiveCfg = Release|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Release|x64.Build.0 = Release|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Release|x86.ActiveCfg = Release|Any CPU
+		{7A465892-7790-4465-BF3D-3120EC519DAF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -518,5 +532,6 @@ Global
 		{4192CA6C-0E8F-4BE2-B099-43B578109036} = {DCB6FCB8-FF92-AC57-0842-1F72A354D6B1}
 		{2A3E98E9-48B9-431F-94FD-81C31C526156} = {90298CBA-BD6F-3A0A-69D5-97CAD7B05E7E}
 		{CB227DCE-F40C-4808-9AA0-0353FEED4BAF} = {90298CBA-BD6F-3A0A-69D5-97CAD7B05E7E}
+		{7A465892-7790-4465-BF3D-3120EC519DAF} = {90298CBA-BD6F-3A0A-69D5-97CAD7B05E7E}
 	EndGlobalSection
 EndGlobal

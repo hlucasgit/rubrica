@@ -7,6 +7,7 @@
       "src\\BuildingBlocks\\SecureSign.Shared.Auth\\SecureSign.Shared.Auth.csproj",
       "src\\BuildingBlocks\\SecureSign.Pades\\SecureSign.Pades.csproj",
       "src\\BuildingBlocks\\SecureSign.Trust\\SecureSign.Trust.csproj",
+      "src\\BuildingBlocks\\SecureSign.Validator\\SecureSign.Validator.csproj",
       "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Domain\\SecureSign.Documents.Domain.csproj",
       "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Application\\SecureSign.Documents.Application.csproj",
       "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Infrastructure\\SecureSign.Documents.Infrastructure.csproj",

@@ -6,9 +6,11 @@ using SecureSign.Signature.Application.Estampado;
 using SecureSign.Signature.Domain;
 using SecureSign.Signature.Infrastructure;
 using SecureSign.Signature.Infrastructure.Clients;
+using SecureSign.Signature.Application.ValidarPades;
 using SecureSign.Signature.Infrastructure.Confianza;
 using SecureSign.Signature.Infrastructure.Estampado;
 using SecureSign.Signature.Infrastructure.Persistence;
+using SecureSign.Signature.Infrastructure.ValidarPades;
 using SecureSign.Shared.Auth;
 using SecureSign.Trust;
 
@@ -44,6 +46,14 @@ builder.Services.AddSingleton(_ => ListaConfianzaIofe.CargarDesdeArchivo(
     Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml")));
 builder.Services.AddScoped<ValidadorCertificados>();
 builder.Services.AddScoped<IValidadorConfianzaFirmante, ValidadorConfianzaFirmanteIofe>();
+
+// Validador PAdES independiente (ver informe de preauditoría INDECOPI/IOFE,
+// hallazgo P0-05, y RUNBOOK.md 12.12): compone PdfSignatureVerifier +
+// ValidadorCertificados SIN pasar por PdfSignaturePlaceholder (el
+// generador) — cualquier PDF con PAdES/CMS estándar, de SecureSign o de un
+// tercero, se valida exactamente igual.
+builder.Services.AddScoped<SecureSign.Validator.ValidadorDocumentoPades>();
+builder.Services.AddScoped<IValidadorDocumentoPadesIndependiente, ValidadorDocumentoPadesIndependiente>();
 
 // Clientes HTTP hacia los servicios de dominio de los que depende la
 // orquestación de firma (ver docs/01-arquitectura/arquitectura-general.md

@@ -46,6 +46,8 @@ Al probar la cadena de evidencia contra una base de datos PostgreSQL real (no el
 | `AlmacenamientoDocumentalLocal` | Guarda en disco local del proceso — producción requiere almacenamiento S3-compatible cifrado |
 | Sellado de tiempo TSA (RFC 3161) | Interfaz `ISellosTiempoProvider` definida, sin implementación (requiere contratar una TSA acreditada) |
 | Formato de firma embebida (PAdES) | **Hecho para el Firmador Local, con actualización incremental real y sin techo de firmantes** (`RUNBOOK.md` secciones 12.8, 12.10 y 12.11, proyecto `SecureSign.Pades`): el PDF que descarga `GET /api/documentos/{id}/firmado` trae un diccionario `/Sig` real con `/ByteRange` y un CMS/CAdES-BES incrustado, verificable con cualquier lector PAdES estándar. Nunca reescribe el PDF completo por firma — es una actualización incremental ISO 32000 de verdad, así que un documento con varios firmantes conserva TODAS las firmas incrustadas válidas. Desde 12.11, la primera firma usa PdfSharpCore y la segunda en adelante usa un lector/escritor PDF propio (sin dependencia de PdfSharpCore, que corrompe internamente el árbol de páginas al reabrir un archivo con `/Prev`) — **probado con 20 firmas sucesivas sobre el mismo documento, las 20 verifican después de cada incremento, y el archivo final reabre sin error en un parser PDF estricto**, cumpliendo el requisito real de negocio de hasta 20 firmantes. El **sello visual** (nombre, fecha, código de verificación — `RUNBOOK.md` sección 11 e `IEstampadorVisualDocumento`) sigue siendo un artefacto aparte, sin cambios |
+| Motor de confianza IOFE (`SecureSign.Trust`) | **Hecho y verificado contra infraestructura real de RENIEC/INDECOPI** (`RUNBOOK.md` sección 12.9): vigencia, cadena X.509 contra una raíz de confianza propia, acreditación en la TSL real de IOFE, propósito (KeyUsage) y revocación real por OCSP y CRL — nunca colapsa "no se pudo determinar" en "válido" (fail-closed). Conectado al flujo de firma: `FirmarLocalHandler` lo consulta ANTES de confirmar la firma |
+| Validador PAdES independiente (`SecureSign.Validator`) | **Hecho y verificado** (`RUNBOOK.md` sección 12.12): endpoint público `POST /api/validador/pdf` que compone `PdfSignatureVerifier` (matemático) + `SecureSign.Trust` (confianza IOFE) sin pasar por el código que genera la firma — produce un expediente por cada `/Sig` del documento, nunca solo verdadero/falso. Sin TSA real, el instante de validación usado es el `/M` autodeclarado por el firmante, marcado explícitamente como no confiable (`InstanteFirmaConfiable=false`) — no es todavía una validación PAdES-T/LT/LTA. Falta el visor independiente ("Rúbrica Validador") que pide el informe de preauditoría como aplicación separada |
 | `database/schema.sql` y `stored-procedures.sql` | Diseño de referencia para una implementación SQL nativa (con el hash-chain calculado en plpgsql) — **no es lo que corre realmente**. La implementación real usa EF Core Code-First con el hash-chain calculado en C# (ver `EventoEvidencia`), con su propio esquema generado por migraciones en `Persistence/Migrations/` de cada servicio |
 
 ## Estructura
@@ -53,9 +55,12 @@ Al probar la cadena de evidencia contra una base de datos PostgreSQL real (no el
 ```
 src/backend/
   src/BuildingBlocks/
-    SecureSign.Domain/            # Entity, Result, HashDocumental
-    SecureSign.Application/       # (reservado para comportamiento MediatR compartido)
-    SecureSign.Shared.Auth/       # Emisión/validación JWT, TenantContext, HttpClient con forwarding de token
+    SecureSign.Domain/             # Entity, Result, HashDocumental
+    SecureSign.Application/        # (reservado para comportamiento MediatR compartido)
+    SecureSign.Shared.Auth/        # Emisión/validación JWT, TenantContext, HttpClient con forwarding de token
+    SecureSign.Pades/               # /Sig, /ByteRange, CMS/CAdES-BES, actualización incremental sin techo de firmantes (RUNBOOK 12.8/12.10/12.11)
+    SecureSign.Trust/               # Motor de confianza IOFE — vigencia, cadena X.509, TSL, OCSP, CRL (RUNBOOK 12.9)
+    SecureSign.Validator/           # Validador PAdES independiente — compone Pades+Trust sin depender del generador (RUNBOOK 12.12)
   src/Services/
     SecureSign.Documents/         # Domain + Application + Infrastructure (EF Core + PostgreSQL) + Api
     SecureSign.Signature/         # ídem — máquina de estados + orquestación (llama a Documents/Crypto/Evidence)

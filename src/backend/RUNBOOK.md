@@ -734,3 +734,33 @@ Reapertura final con PdfSharpCore: OK - 1 pagina(s).
 La última línea es la comprobación más fuerte: el archivo con 20 revisiones incrementales acumuladas se reabre sin error con el parser estricto de PdfSharpCore — no solo pasa la verificación `/ByteRange`/CMS propia, sino que es un PDF sintácticamente válido para cualquier lector. Se repitió además la prueba de regresión de un solo firmante (sello visual + PAdES, camino real de producción): sigue funcionando igual que en 12.8, ahora por la ruta `PrepararConPdfSharpCore` simplificada.
 
 **Alcance no cubierto**: `PrepararConLectorPropio` asume que el archivo con `/Prev` que recibe fue producido por este mismo componente (o por PdfSharpCore en una única revisión previa) — no está pensado para firmar incrementalmente un PDF ajeno que YA traiga varias revisiones de un tercero (p. ej. de Adobe) en un formato distinto. Ese caso seguiría cayendo en `PrepararConPdfSharpCore` únicamente si ese PDF ajeno tiene una sola revisión (sin `/Prev`); si ya tiene varias, no hay ruta segura implementada todavía. No apareció como requisito en esta sesión.
+
+### 12.12 `SecureSign.Validator` — validador PAdES independiente (hallazgo P0-05)
+
+El informe de preauditoría INDECOPI/IOFE (hallazgo P0-05) exige un validador que, dado un PDF firmado, determine para cada firma la integridad documental, el certificado firmante, vigencia, propósito, cadena, entidad emisora, revocación (OCSP/CRL), ancla de confianza IOFE y una conclusión final — **sin depender del mismo camino de código que generó la firma**. Esta sección documenta ese componente, ya operativo (no solo una librería sin usar).
+
+**Diseño**: `SecureSign.Validator.ValidadorDocumentoPades` no referencia `PdfSignaturePlaceholder` (el generador) en absoluto — solo compone dos piezas que ya eran independientes entre sí:
+- `SecureSign.Pades.PdfSignatureVerifier` — verificación matemática pura (recalcula el hash sobre `/ByteRange` y valida el CMS/CAdES contra su propio certificado); no sabe nada de cómo se generó el PDF, así que un documento firmado por CUALQUIER otro software que produzca PAdES/CMS estándar se procesa exactamente igual.
+- `SecureSign.Trust.ValidadorCertificados` — el motor de confianza IOFE de 12.9 (vigencia, cadena X.509, TSL, OCSP, CRL, propósito), reutilizado tal cual.
+
+El resultado nunca es solo `true`/`false` (ver `ResultadoValidacionFirmaPades`/`ResultadoValidacionDocumentoPades`): cada comprobación queda expuesta por separado y con evidencia textual auditable, igual que en 12.9.
+
+**Instante de validación — limitación explícita y deliberada**: sin una TSA real (`ISellosTiempoProvider` sigue sin implementación, ver hallazgo P1 del informe), no hay ningún instante de firma *probado* por un tercero. El validador usa el mejor dato disponible — el `/M` que el propio firmante declaró dentro de su `/Sig` — como instante para evaluar vigencia y revocación (evita el error de penalizar una firma antigua cuyo certificado ya venció HOY, o de aceptar una firma sobre un certificado revocado DESPUÉS de firmar). Pero `InstanteFirmaConfiable` es **siempre `false`**: el expediente deja constancia explícita de que ese instante es autodeclarado, no forma parte todavía de una validación PAdES-T/LT/LTA, y no debe presentarse como tal.
+
+**Dos correcciones necesarias en `PdfSignatureVerifier` para que el expediente fuera correcto en documentos multifirma**: al construir el validador sobre las 20 firmas de 12.11 se detectó que la extracción de `/Name` solo entendía el formato de cadena literal `(...)` — que es el que escribe PdfSharpCore para la primera firma, pero NO el formato hex `<FEFF...>` que usa el lector propio (`FormatearCadenaUnicode`) para la segunda firma en adelante — así que el nombre del firmante se perdía silenciosamente en 19 de cada 20 firmas. Se generalizó en un solo helper (`ExtraerCadenaPdf`) que entiende ambos formatos, y se usó también para extraer `/M` (nuevo: `ResultadoVerificacionPades.InstanteFirmaDeclarado`, con `ParsearFechaPdf` como inversa de `PdfSignaturePlaceholder.FormatearFechaPdf`).
+
+**Expuesto como endpoint real, no solo como librería**: `POST /api/validador/pdf` (multipart/form-data, campo `documento`) en `SecureSign.Signature.Api`, sin autenticación (`[AllowAnonymous]`, igual que `GET /api/validacion/{codigo}`) — cualquier destinatario de un documento firmado, no solo un tenant integrado, debe poder verificarlo. Capa de aplicación: `ValidarPadesQuery`/`ValidarPadesHandler` (MediatR, igual patrón que el resto del sistema) sobre el puerto `IValidadorDocumentoPadesIndependiente`, implementado en Infraestructura (`ValidadorDocumentoPadesIndependiente`) como adaptador delgado sobre `SecureSign.Validator` — mismo patrón exacto que `IValidadorConfianzaFirmante`/`ValidadorConfianzaFirmanteIofe` de 12.9. Los DTOs de la capa de Aplicación son planos (strings/bools/fechas) para no acoplarla a `X509Certificate2` ni a los tipos de `SecureSign.Trust`.
+
+**Verificado en esta sesión**: se validó el PDF real de 20 firmas de 12.11 (certificados de prueba autofirmados, no de la IOFE real) con un arnés que construye exactamente el mismo grafo de objetos que registra `Program.cs`:
+
+```
+TotalFirmas=20  DocumentoValido=False
+Firma #1..20: FirmaCriptograficaValida=True, NombreFirma="Firmante NN" (correcto en las 20, no solo en la 1ª)
+              CertificadoVigente=True, CadenaValida=False (UntrustedRoot), RaizConfiableIofe=False,
+              PropositoValido=False (sin KeyUsage), Revocacion.Combinado=Unavailable
+              EstadoFinal=False
+```
+
+Esto es exactamente el comportamiento correcto y esperado: la firma criptográfica es genuina en las 20 (el documento no fue alterado), pero como los certificados de prueba no pertenecen a la cadena de confianza real de la IOFE, el expediente lo marca `EstadoFinal=False` con la evidencia exacta de por qué — nunca "válido por defecto". La validación de confianza IOFE en sí (TSL/OCSP/CRL reales contra RENIEC/INDECOPI) ya estaba probada contra infraestructura real en 12.9; esta sesión probó la composición correcta de ambas piezas sobre un documento multifirma real.
+
+**Alcance no cubierto**: el informe también pide un visor independiente ("Rúbrica Validador") como aplicación separada — no implementado en esta sesión, solo el motor de validación y su endpoint HTTP. Tampoco se implementó aún PAdES-T/LT/LTA (depende de la TSA real, sin implementación).
