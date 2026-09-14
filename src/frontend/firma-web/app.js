@@ -438,12 +438,25 @@ function urlServicioLocal() {
 
 document.getElementById("btnFirmarConFirmadorLocal").addEventListener("click", async () => {
   const { solicitudId, flujoId } = estado.individual;
-  const parametros = { gatewayUrl: estado.gatewayUrl, solicitudId, flujoId, accessToken: estado.token };
 
   const servicioActivo = await estaActivoElFirmadorLocal();
   if (!servicioActivo) {
     mostrarMensaje("mensajeFirmadorLocal",
       `No se detecta el Firmador Local en el puerto ${estado.puertoFirmadorLocal}. Ábrelo (doble clic al .exe instalado) — queda con un ícono en la bandeja del sistema mientras esté activo — o revisa que el puerto configurado aquí coincida con el que usaste al iniciarlo.`, "error");
+    return;
+  }
+
+  // Ver informe de preauditoría INDECOPI/IOFE, sección 12, y RUNBOOK.md
+  // 12.13: el navegador ya NO le pasa al Firmador Local su propio
+  // accessToken (reusable, de hasta 60 minutos) — primero pide un ticket de
+  // firma de un solo uso, ligado a esta solicitud/flujo/documento, con vida
+  // de solo 2 minutos, y le entrega SOLO ese ticket.
+  let ticket;
+  try {
+    const datosTicket = await apiJson(`/api/firmas/${solicitudId}/flujos/${flujoId}/ticket-firmador-local`, { method: "POST" });
+    ticket = datosTicket.ticket;
+  } catch (e) {
+    mostrarMensaje("mensajeFirmadorLocal", `No se pudo emitir el ticket de firma: ${e.message}`, "error");
     return;
   }
 
@@ -454,7 +467,7 @@ document.getElementById("btnFirmarConFirmadorLocal").addEventListener("click", a
     const respuesta = await fetch(`${urlServicioLocal()}/firmar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parametros),
+      body: JSON.stringify({ gatewayUrl: estado.gatewayUrl, ticket }),
     });
     const resultado = await respuesta.json();
 

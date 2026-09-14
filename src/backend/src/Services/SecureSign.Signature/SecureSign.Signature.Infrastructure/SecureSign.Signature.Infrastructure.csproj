@@ -5,6 +5,7 @@
     <ProjectReference Include="..\SecureSign.Signature.Application\SecureSign.Signature.Application.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\SecureSign.Trust\SecureSign.Trust.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\SecureSign.Validator\SecureSign.Validator.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\SecureSign.Shared.Auth\SecureSign.Shared.Auth.csproj" />
   </ItemGroup>
 
   <ItemGroup>

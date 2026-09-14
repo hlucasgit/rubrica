@@ -6,10 +6,12 @@ using SecureSign.Signature.Application.Estampado;
 using SecureSign.Signature.Domain;
 using SecureSign.Signature.Infrastructure;
 using SecureSign.Signature.Infrastructure.Clients;
+using SecureSign.Signature.Application.TicketFirmaLocal;
 using SecureSign.Signature.Application.ValidarPades;
 using SecureSign.Signature.Infrastructure.Confianza;
 using SecureSign.Signature.Infrastructure.Estampado;
 using SecureSign.Signature.Infrastructure.Persistence;
+using SecureSign.Signature.Infrastructure.TicketFirmaLocal;
 using SecureSign.Signature.Infrastructure.ValidarPades;
 using SecureSign.Shared.Auth;
 using SecureSign.Trust;
@@ -54,6 +56,16 @@ builder.Services.AddScoped<IValidadorConfianzaFirmante, ValidadorConfianzaFirman
 // tercero, se valida exactamente igual.
 builder.Services.AddScoped<SecureSign.Validator.ValidadorDocumentoPades>();
 builder.Services.AddScoped<IValidadorDocumentoPadesIndependiente, ValidadorDocumentoPadesIndependiente>();
+
+// Ticket de firma de un solo uso para el Firmador Local (ver informe de
+// preauditoría INDECOPI/IOFE, sección 12, y RUNBOOK.md 12.13): reutiliza
+// deliberadamente la misma llave HS256 de JwtOptions — es seguro porque el
+// Firmador Local nunca verifica este JWT, solo lo reenvía como credencial
+// Bearer hacia este mismo backend, que sí lo valida (firma, expiración) con
+// el pipeline de JWT ya existente, y además liga sus claims a la operación
+// exacta que se está completando (ver FirmarLocalHandler).
+builder.Services.AddSingleton<EmisorTicketFirmaLocal>();
+builder.Services.AddScoped<IEmisorTicketFirmaLocal, EmisorTicketFirmaLocalAdaptador>();
 
 // Clientes HTTP hacia los servicios de dominio de los que depende la
 // orquestación de firma (ver docs/01-arquitectura/arquitectura-general.md

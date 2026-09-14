@@ -133,8 +133,30 @@ internal sealed class ServicioLocal : ApplicationContext
                 using var lector = new StreamReader(contexto.Request.InputStream, Encoding.UTF8);
                 var cuerpoJson = await lector.ReadToEndAsync();
                 var parametros = Program.ParsearParametrosDesdeCuerpoJson(cuerpoJson);
+                var ticket = Program.DecodificarTicket(parametros.Ticket);
 
-                var resultado = await Program.EjecutarFirmaAsync(parametros, _hiloUi);
+                // Ver informe de preauditoría INDECOPI/IOFE, sección 12
+                // ("Origen web no autorizado → Bloqueado") y RUNBOOK.md
+                // 12.13: el ticket declara el origen exacto (esquema+host+puerto)
+                // de la página que lo pidió — si la petición HTTP que de
+                // verdad llega aquí trae un Origin distinto (o ninguno,
+                // cuando el ticket sí declaró uno), se rechaza sin mostrar
+                // ningún diálogo. Esto es lo único que puede detectar, en
+                // esta máquina, que OTRA pestaña/sitio abierto en el
+                // navegador — no la página legítima que el usuario estaba
+                // usando — es quien está llamando a este servicio local.
+                var origenPeticion = contexto.Request.Headers["Origin"];
+                if (!string.IsNullOrEmpty(ticket.Origen) && !string.Equals(ticket.Origen, origenPeticion, StringComparison.OrdinalIgnoreCase))
+                {
+                    await ResponderJsonAsync(respuesta, 403, new
+                    {
+                        ok = false,
+                        mensaje = $"El origen de esta petición ({origenPeticion ?? "(ninguno)"}) no coincide con el origen autorizado por el ticket de firma — operación rechazada.",
+                    });
+                    return;
+                }
+
+                var resultado = await Program.EjecutarFirmaAsync(parametros, ticket, _hiloUi);
                 await ResponderJsonAsync(respuesta, resultado.Ok ? 200 : 400, resultado);
                 return;
             }

@@ -12,6 +12,7 @@ using SecureSign.Signature.Application.ListarPendientes;
 using SecureSign.Signature.Application.NotificarSolicitud;
 using SecureSign.Signature.Application.ObtenerDocumentoVisual;
 using SecureSign.Signature.Application.RechazarFirma;
+using SecureSign.Signature.Application.TicketFirmaLocal;
 using SecureSign.Signature.Application.VisualizarDocumento;
 using SecureSign.Signature.Domain;
 using SecureSign.Shared.Auth;
@@ -198,6 +199,27 @@ public sealed class FirmasController(ISender mediator) : ControllerBase
     }
 
     /// <summary>
+    /// POST /api/firmas/{id}/flujos/{flujoId}/ticket-firmador-local — emite
+    /// el ticket de firma de un solo uso que el navegador debe entregarle al
+    /// Firmador Local en vez de pasarle directamente su propio access token
+    /// reusable (ver informe de preauditoría INDECOPI/IOFE, sección 12, y
+    /// RUNBOOK.md 12.13). El ticket queda ligado a esta solicitud, este
+    /// flujo, el documento actual y su hash vigente en este instante.
+    /// </summary>
+    [HttpPost("{id:guid}/flujos/{flujoId:guid}/ticket-firmador-local")]
+    public async Task<IActionResult> EmitirTicketFirmadorLocal(Guid id, Guid flujoId, CancellationToken ct)
+    {
+        var tenant = User.ObtenerTenantContext();
+        var origen = Request.Headers.Origin.FirstOrDefault();
+        var query = new EmitirTicketFirmaLocalQuery(tenant.TenantId, id, flujoId, origen);
+        var resultado = await mediator.Send(query, ct);
+
+        return resultado.EsExitoso
+            ? Ok(resultado.Valor)
+            : BadRequest(new { error = "TICKET_INVALIDO", mensaje = resultado.Error });
+    }
+
+    /// <summary>
     /// POST /api/firmas/{id}/flujos/{flujoId}/completar-firma-local — la
     /// invoca el Firmador Local (ver RUNBOOK.md sección 12) tras firmar el
     /// hash del documento en la propia máquina del firmante, con su propio
@@ -209,13 +231,37 @@ public sealed class FirmasController(ISender mediator) : ControllerBase
         var tenant = User.ObtenerTenantContext();
         var comando = new FirmarLocalCommand(
             tenant.TenantId, id, flujoId, body.FirmaBase64, body.CertificadoBase64, body.Algoritmo, CapturarContexto(),
-            body.DocumentoPadesBase64);
+            body.DocumentoPadesBase64, ExtraerTicketFirmaLocal());
 
         var resultado = await mediator.Send(comando, ct);
 
         return resultado.EsExitoso
             ? Ok(resultado.Valor)
             : BadRequest(new { error = "FIRMA_LOCAL_INVALIDA", mensaje = resultado.Error });
+    }
+
+    /// <summary>
+    /// Si esta petición se autenticó con un ticket de firma de un solo uso
+    /// (ver EmisorTicketFirmaLocal), extrae sus claims ligados para que
+    /// FirmarLocalHandler los verifique contra la operación real — ver
+    /// RUNBOOK.md 12.13. Devuelve null para un token de sesión normal (el
+    /// flujo clásico sin ticket sigue funcionando igual).
+    /// </summary>
+    private ClaimsTicketFirmaLocal? ExtraerTicketFirmaLocal()
+    {
+        string? Claim(string tipo) => User.Claims.FirstOrDefault(c => c.Type == tipo)?.Value;
+
+        if (Claim(EmisorTicketFirmaLocal.ClaimTipo) != EmisorTicketFirmaLocal.ValorTipoTicketFirmaLocal)
+            return null;
+
+        var solicitudId = Claim(EmisorTicketFirmaLocal.ClaimSolicitudFirmaId);
+        var flujoId = Claim(EmisorTicketFirmaLocal.ClaimFlujoFirmaId);
+        var documentoId = Claim(EmisorTicketFirmaLocal.ClaimDocumentoId);
+        var hash = Claim(EmisorTicketFirmaLocal.ClaimDocumentoHash);
+        if (solicitudId is null || flujoId is null || documentoId is null || hash is null)
+            return null;
+
+        return new ClaimsTicketFirmaLocal(Guid.Parse(solicitudId), Guid.Parse(flujoId), Guid.Parse(documentoId), hash);
     }
 
     /// <summary>POST /api/firmas/{id}/flujos/{flujoId}/rechazar</summary>

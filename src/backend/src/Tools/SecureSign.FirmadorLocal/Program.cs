@@ -86,7 +86,8 @@ internal static class Program
             try
             {
                 var parametros = ParsearParametrosDesdeUri(args[0]);
-                var resultado = await EjecutarFirmaAsync(parametros, hiloUi: null);
+                var ticket = DecodificarTicket(parametros.Ticket);
+                var resultado = await EjecutarFirmaAsync(parametros, ticket, hiloUi: null);
                 Console.WriteLine(resultado.Mensaje);
                 return resultado.Ok ? 0 : 1;
             }
@@ -174,9 +175,31 @@ internal static class Program
 
     // ---------- flujo de firma (compartido entre el servicio local y el modo heredado) ----------
 
-    internal sealed record ParametrosFirma(string GatewayUrl, string SolicitudId, string FlujoId, string AccessToken);
+    /// <param name="Ticket">
+    /// El ticket de firma de un solo uso (ver EmisorTicketFirmaLocal y
+    /// RUNBOOK.md 12.13) — SUSTITUYE al accessToken reusable que este mismo
+    /// campo llevaba antes: se usa tal cual como credencial Bearer para las
+    /// 3 llamadas al backend (este proceso nunca verifica su firma — eso lo
+    /// hace el backend, que es quien realmente la conoce; ver ClaimsTicket).
+    /// </param>
+    internal sealed record ParametrosFirma(string GatewayUrl, string Ticket);
 
     internal sealed record ResultadoFirma(bool Ok, string Mensaje, JsonElement? Datos);
+
+    /// <summary>
+    /// Los claims del ticket, leídos por simple decodificación Base64Url del
+    /// payload del JWT — NUNCA se verifica la firma aquí (este proceso no
+    /// conoce ni debe conocer la llave del backend). Esto es deliberado y
+    /// seguro (ver comentario extenso en EmisorTicketFirmaLocal y RUNBOOK.md
+    /// 12.13): un ticket alterado simplemente será rechazado por el backend
+    /// cuando este proceso lo use como Bearer — los usos de estos claims
+    /// aquí son solo comprobaciones locales de salida rápida (no repetir un
+    /// ticket vencido, no aceptar una petición de un origen distinto al
+    /// autorizado, no firmar un documento con un hash distinto al esperado)
+    /// para fallar ANTES de pedirle el PIN al usuario, nunca como sustituto
+    /// de la validación real.
+    /// </summary>
+    internal sealed record ClaimsTicket(string SolicitudId, string FlujoId, string? DocumentoHashEsperado, string? Origen, DateTimeOffset? ExpiraEn);
 
     internal static ParametrosFirma ParsearParametrosDesdeUri(string uriCompleta)
     {
@@ -198,9 +221,35 @@ internal static class Program
 
     private static ParametrosFirma ParametrosDesdeJson(JsonElement doc) => new(
         doc.GetProperty("gatewayUrl").GetString()!,
-        doc.GetProperty("solicitudId").GetString()!,
-        doc.GetProperty("flujoId").GetString()!,
-        doc.GetProperty("accessToken").GetString()!);
+        doc.GetProperty("ticket").GetString()!);
+
+    /// <summary>Decodifica (sin verificar firma — ver ClaimsTicket) el payload de un JWT.</summary>
+    internal static ClaimsTicket DecodificarTicket(string jwt)
+    {
+        var partes = jwt.Split('.');
+        if (partes.Length != 3)
+            throw new ArgumentException("El ticket no tiene el formato JWT esperado (header.payload.signature).");
+
+        var payload = JsonSerializer.Deserialize<JsonElement>(Base64UrlDecodificar(partes[1]));
+
+        string? Obtener(string clave) => payload.TryGetProperty(clave, out var v) ? v.GetString() : null;
+
+        var solicitudId = Obtener("ssg_solicitud_id") ?? throw new ArgumentException("El ticket no trae ssg_solicitud_id.");
+        var flujoId = Obtener("ssg_flujo_id") ?? throw new ArgumentException("El ticket no trae ssg_flujo_id.");
+
+        DateTimeOffset? expira = payload.TryGetProperty("exp", out var expEl) && expEl.TryGetInt64(out var expUnix)
+            ? DateTimeOffset.FromUnixTimeSeconds(expUnix)
+            : null;
+
+        return new ClaimsTicket(solicitudId, flujoId, Obtener("ssg_documento_hash"), Obtener("ssg_origen"), expira);
+    }
+
+    private static byte[] Base64UrlDecodificar(string valor)
+    {
+        string s = valor.Replace('-', '+').Replace('_', '/');
+        s = (s.Length % 4) switch { 2 => s + "==", 3 => s + "=", _ => s };
+        return Convert.FromBase64String(s);
+    }
 
     /// <param name="hiloUi">
     /// Formulario cuyo Handle se usa para <c>Invoke</c> la ventana de firma
@@ -209,12 +258,15 @@ internal static class Program
     /// Si es <c>null</c>, se asume que ya se está en el hilo de UI (modo
     /// heredado por consola, de un solo uso).
     /// </param>
-    internal static async Task<ResultadoFirma> EjecutarFirmaAsync(ParametrosFirma parametros, Form? hiloUi)
+    internal static async Task<ResultadoFirma> EjecutarFirmaAsync(ParametrosFirma parametros, ClaimsTicket ticket, Form? hiloUi)
     {
-        using var http = new HttpClient { BaseAddress = new Uri(parametros.GatewayUrl) };
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", parametros.AccessToken);
+        if (ticket.ExpiraEn is { } expira && DateTimeOffset.UtcNow >= expira)
+            return new ResultadoFirma(false, "El ticket de firma ya expiró — vuelve a intentarlo desde el navegador (se emite uno nuevo cada vez).", null);
 
-        var estado = await http.GetFromJsonAsync<JsonElement>($"/api/firmas/{parametros.SolicitudId}/estado");
+        using var http = new HttpClient { BaseAddress = new Uri(parametros.GatewayUrl) };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", parametros.Ticket);
+
+        var estado = await http.GetFromJsonAsync<JsonElement>($"/api/firmas/{ticket.SolicitudId}/estado");
         var documentoId = estado.GetProperty("documentoId").GetGuid();
 
         var respuestaDocumento = await http.GetAsync($"/api/documentos/{documentoId}/contenido");
@@ -225,6 +277,21 @@ internal static class Program
             ?? respuestaDocumento.Content.Headers.ContentDisposition?.FileName
             ?? documentoId.ToString();
         var hash = SHA256.HashData(contenido);
+
+        // Ver informe de preauditoría INDECOPI/IOFE, sección 12/13 ("Documento
+        // distinto al hash autorizado → Bloqueado"): el ticket declara el hash
+        // que el usuario autorizó a firmar EN EL MOMENTO en que el navegador lo
+        // pidió — si el documento cambió desde entonces (o el ticket viene de
+        // otro documento), se rechaza ANTES de pedir el PIN. El backend
+        // (FirmarLocalHandler) vuelve a comprobar esto de forma independiente,
+        // así que esta comprobación aquí es solo para fallar rápido y sin
+        // gastar una operación con la tarjeta.
+        if (ticket.DocumentoHashEsperado is { Length: > 0 } hashEsperado &&
+            !string.Equals(Convert.ToHexString(hash), hashEsperado, StringComparison.OrdinalIgnoreCase))
+        {
+            return new ResultadoFirma(false,
+                "El documento descargado no coincide con el hash que autorizó el ticket de firma — operación rechazada por seguridad.", null);
+        }
 
         var candidatos = EnumerarCertificados();
 
@@ -305,7 +372,7 @@ internal static class Program
             documentoPadesBase64,
         };
         var respuesta = await http.PostAsJsonAsync(
-            $"/api/firmas/{parametros.SolicitudId}/flujos/{parametros.FlujoId}/completar-firma-local", cuerpo);
+            $"/api/firmas/{ticket.SolicitudId}/flujos/{ticket.FlujoId}/completar-firma-local", cuerpo);
         var textoRespuesta = await respuesta.Content.ReadAsStringAsync();
 
         if (!respuesta.IsSuccessStatusCode)

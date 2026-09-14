@@ -49,6 +49,23 @@ public sealed class FirmarLocalHandler(
         var documento = await documentos.ObtenerAsync(solicitud.DocumentoId, ct);
         if (documento is null) return Result.Fallido<FirmarDocumentoResponse>("El documento asociado ya no existe.");
 
+        // Si la petición se autenticó con un ticket de firma de un solo uso
+        // (ver EmisorTicketFirmaLocal, RUNBOOK.md 12.13), sus claims deben
+        // coincidir EXACTAMENTE con la operación que se está completando —
+        // un ticket emitido para otra solicitud/flujo/documento, o cuyo hash
+        // ya no coincide con el documento actual, se rechaza sin excepción
+        // (fail closed, ver informe de preauditoría INDECOPI/IOFE, sección 12).
+        if (request.Ticket is { } ticket)
+        {
+            if (ticket.SolicitudFirmaId != request.SolicitudFirmaId || ticket.FlujoFirmaId != request.FlujoFirmaId || ticket.DocumentoId != solicitud.DocumentoId)
+                return Result.Fallido<FirmarDocumentoResponse>(
+                    "El ticket de firma no corresponde a esta solicitud/flujo/documento — operación rechazada.");
+
+            if (!string.Equals(ticket.DocumentoHashSha256Hex, documento.HashSha256, StringComparison.OrdinalIgnoreCase))
+                return Result.Fallido<FirmarDocumentoResponse>(
+                    "El documento actual ya no coincide con el hash que autorizó el ticket de firma — operación rechazada.");
+        }
+
         byte[] hash, firma, certificado;
         try
         {
