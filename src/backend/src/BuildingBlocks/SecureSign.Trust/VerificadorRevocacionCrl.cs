@@ -19,15 +19,18 @@ public sealed class VerificadorRevocacionCrl(HttpClient http)
 
     private readonly ConcurrentDictionary<string, Task<CrlCacheada?>> _cache = new();
 
-    public async Task<(EstadoRevocacion Estado, string Detalle)> VerificarAsync(X509Certificate2 certificado, CancellationToken ct = default)
+    public async Task<(EstadoRevocacion Estado, string Detalle)> VerificarAsync(X509Certificate2 certificado, X509Certificate2? emisor, CancellationToken ct = default)
     {
         var urls = ExtensionesX509.ObtenerUrlsCrl(certificado);
         if (urls.Count == 0)
             return (EstadoRevocacion.Unavailable, "El certificado no declara ningún punto de distribución de CRL (2.5.29.31).");
 
+        if (emisor is null)
+            return (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para verificar la firma de la CRL.");
+
         foreach (var url in urls)
         {
-            var crl = await ObtenerOCachearAsync(url, ct);
+            var crl = await ObtenerOCachearAsync(url, emisor, ct);
             if (crl is null) continue; // probar el siguiente mirror
 
             if (DateTimeOffset.UtcNow > crl.ValidaHasta)
@@ -42,11 +45,11 @@ public sealed class VerificadorRevocacionCrl(HttpClient http)
         return (EstadoRevocacion.Unavailable, $"No se pudo descargar ninguna CRL de los {urls.Count} punto(s) de distribución declarados.");
     }
 
-    private Task<CrlCacheada?> ObtenerOCachearAsync(string url, CancellationToken ct) =>
+    private Task<CrlCacheada?> ObtenerOCachearAsync(string url, X509Certificate2 emisor, CancellationToken ct) =>
         _cache.AddOrUpdate(
             url,
-            _ => DescargarYParsearAsync(url, ct),
-            (_, tareaExistente) => EstaVigente(tareaExistente) ? tareaExistente : DescargarYParsearAsync(url, ct));
+            _ => DescargarYParsearAsync(url, emisor, ct),
+            (_, tareaExistente) => EstaVigente(tareaExistente) ? tareaExistente : DescargarYParsearAsync(url, emisor, ct));
 
     private static bool EstaVigente(Task<CrlCacheada?> tarea) =>
         tarea.IsCompletedSuccessfully && tarea.Result is { } crl && DateTimeOffset.UtcNow <= crl.ValidaHasta;
@@ -66,13 +69,21 @@ public sealed class VerificadorRevocacionCrl(HttpClient http)
         return sinCeros.Length > 0 ? sinCeros : "0";
     }
 
-    private async Task<CrlCacheada?> DescargarYParsearAsync(string url, CancellationToken ct)
+    private async Task<CrlCacheada?> DescargarYParsearAsync(string url, X509Certificate2 emisor, CancellationToken ct)
     {
         try
         {
             byte[] bytes = await http.GetByteArrayAsync(url, ct);
             var crl = new X509CrlParser().ReadCrl(bytes);
             if (crl is null) return null;
+
+            // RFC 5280 §5: nunca confiar en el contenido de una CRL sin
+            // verificar que la firmó realmente el emisor del certificado
+            // consultado — de lo contrario cualquiera que responda en esa
+            // URL (MITM, DNS envenenado, servidor comprometido) podría forjar
+            // un "no revocado". Esto NO se estaba haciendo antes.
+            var emisorBc = new X509CertificateParser().ReadCertificate(emisor.RawData);
+            if (!crl.IsSignatureValid(emisorBc.GetPublicKey())) return null;
 
             var seriales = new HashSet<string>();
             var revocados = crl.GetRevokedCertificates();

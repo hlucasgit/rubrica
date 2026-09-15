@@ -59,12 +59,22 @@ public sealed class FirmarLocalHandler(
         if (request.Ticket is { } ticket)
         {
             if (ticket.SolicitudFirmaId != request.SolicitudFirmaId || ticket.FlujoFirmaId != request.FlujoFirmaId || ticket.DocumentoId != solicitud.DocumentoId)
+            {
+                await RegistrarTicketRechazadoAsync(
+                    $"Solicitud {request.SolicitudFirmaId}, flujo {request.FlujoFirmaId}: ticket emitido para solicitud {ticket.SolicitudFirmaId}/flujo {ticket.FlujoFirmaId}/documento {ticket.DocumentoId}.",
+                    request.TenantId, ct);
                 return Result.Fallido<FirmarDocumentoResponse>(
                     "El ticket de firma no corresponde a esta solicitud/flujo/documento — operación rechazada.");
+            }
 
             if (!string.Equals(ticket.DocumentoHashSha256Hex, documento.HashSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                await RegistrarTicketRechazadoAsync(
+                    $"Solicitud {request.SolicitudFirmaId}, flujo {request.FlujoFirmaId}: hash del documento cambió tras emitirse el ticket.",
+                    request.TenantId, ct);
                 return Result.Fallido<FirmarDocumentoResponse>(
                     "El documento actual ya no coincide con el hash que autorizó el ticket de firma — operación rechazada.");
+            }
         }
 
         byte[] hash, firma, certificado;
@@ -182,5 +192,11 @@ public sealed class FirmarLocalHandler(
     {
         try { return delPades.RawData.AsSpan().SequenceEqual(delFlujo); }
         catch { return false; }
+    }
+
+    private async Task RegistrarTicketRechazadoAsync(string detalle, Guid tenantId, CancellationToken ct)
+    {
+        try { await auditoria.RegistrarAsync("TicketFirmaLocalRechazado", detalle, tenantId, ct); }
+        catch (HttpRequestException) { /* la auditoría nunca debe impedir que se reporte el rechazo real al llamador */ }
     }
 }

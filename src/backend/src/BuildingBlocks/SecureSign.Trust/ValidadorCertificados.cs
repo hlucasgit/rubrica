@@ -63,7 +63,7 @@ public sealed class ValidadorCertificados(
         var (estadoOcsp, detalleOcsp) = emisorDirecto is not null
             ? await verificadorOcsp.VerificarAsync(certificado, emisorDirecto, ct)
             : (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para consultar OCSP.");
-        var (estadoCrl, detalleCrl) = await verificadorCrl.VerificarAsync(certificado, ct);
+        var (estadoCrl, detalleCrl) = await verificadorCrl.VerificarAsync(certificado, emisorDirecto, ct);
         evidencia.Add($"OCSP: {estadoOcsp} — {detalleOcsp}");
         evidencia.Add($"CRL: {estadoCrl} — {detalleCrl}");
 

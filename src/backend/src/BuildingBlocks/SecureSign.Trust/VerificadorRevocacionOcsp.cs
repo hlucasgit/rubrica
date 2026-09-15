@@ -1,8 +1,10 @@
 using System.Net.Http.Headers;
 using System.Security.Cryptography.X509Certificates;
+using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Ocsp;
 using Org.BouncyCastle.X509;
+using BcCertificate = Org.BouncyCastle.X509.X509Certificate;
 
 namespace SecureSign.Trust;
 
@@ -55,6 +57,13 @@ public sealed class VerificadorRevocacionOcsp(HttpClient http)
             if (individual is null)
                 return (EstadoRevocacion.Unavailable, $"El responder OCSP {url} no incluyó una respuesta para este certificado.");
 
+            // RFC 6960 §3.2: nunca confiar en el contenido de una respuesta
+            // OCSP sin verificar su firma primero — de lo contrario cualquiera
+            // que responda en esa URL (MITM, servidor comprometido) podría
+            // forjar un "no revocado". Esto NO se estaba haciendo antes.
+            if (!FirmaEsConfiable(basica, emisorBc))
+                return (EstadoRevocacion.Unavailable, $"La respuesta OCSP de {url} no está firmada por el emisor ni por un firmante OCSP delegado válido — se descarta sin confiar en su contenido.");
+
             return individual.GetCertStatus() switch
             {
                 null => (EstadoRevocacion.Good, $"OCSP {url}: certificado no revocado."),
@@ -66,5 +75,34 @@ public sealed class VerificadorRevocacionOcsp(HttpClient http)
         {
             return (EstadoRevocacion.Unavailable, $"No se pudo completar la consulta OCSP a {url}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// El firmante válido de una respuesta OCSP es o bien el propio emisor
+    /// del certificado consultado (firma directa) o un certificado delegado,
+    /// emitido por ese mismo emisor, que declare el EKU id-kp-OCSPSigning
+    /// (RFC 6960 §4.2.2.2). Cualquier otra llave se descarta.
+    /// </summary>
+    private static bool FirmaEsConfiable(BasicOcspResp respuesta, BcCertificate emisor)
+    {
+        try
+        {
+            if (respuesta.Verify(emisor.GetPublicKey())) return true;
+        }
+        catch { /* no la firmó directamente el emisor: probar un firmante delegado */ }
+
+        foreach (var candidato in respuesta.GetCerts())
+        {
+            try
+            {
+                candidato.Verify(emisor.GetPublicKey()); // ¿lo emitió el mismo emisor? lanza si no.
+                var eku = candidato.GetExtendedKeyUsage();
+                if (eku is not null && eku.Contains(KeyPurposeID.id_kp_OCSPSigning) && respuesta.Verify(candidato.GetPublicKey()))
+                    return true;
+            }
+            catch { /* candidato inválido: probar el siguiente */ }
+        }
+
+        return false;
     }
 }

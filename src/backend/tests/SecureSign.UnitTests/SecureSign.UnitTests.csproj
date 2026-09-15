@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Domain\SecureSign.Domain.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Pades\SecureSign.Pades.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Tsa\SecureSign.Tsa.csproj" />
+    <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Trust\SecureSign.Trust.csproj" />
   </ItemGroup>
 
 </Project>
