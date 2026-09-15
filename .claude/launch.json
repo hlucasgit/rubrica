@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8099", "--directory", "src/frontend/firma-web"],
       "port": 8099
+    },
+    {
+      "name": "validador-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8098", "--directory", "src/frontend/validador-web"],
+      "port": 8098
     }
   ]
 }

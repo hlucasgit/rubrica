@@ -14,7 +14,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | P0-02 | PAdES debe preservar firmas anteriores en cofirma (actualización incremental) | 🟢 | `SecureSign.Pades`. RUNBOOK 12.8/12.10/12.11 — 20 firmas sucesivas, las 20 verifican después de cada incremento, archivo final reabre en parser estricto |
 | P0-03 | El flujo no debe degradar en silencio PAdES → firma desacoplada | 🟢 | `FirmadorLocal/Program.cs` (`Preparar`/`Inyectar` fuera de un `catch` que ignore el error) — fail closed, aborta sin firmar si el PAdES falla |
 | P0-04 | Pipeline de `main` roto (NETSDK1100, WinForms en runner Linux) | 🟢 | `.github/workflows/ci.yml` — jobs separados `backend-build-test-migrate` (Ubuntu) / `firmador-local-build` (Windows). `main` verde de forma sostenida (ver historial de runs) |
-| P0-05 | Validador independiente que no dependa del código que genera la firma | 🟢 | `SecureSign.Validator` + `POST /api/validador/pdf`. RUNBOOK 12.12 — compone `PdfSignatureVerifier` + `SecureSign.Trust` sin referenciar `PdfSignaturePlaceholder` |
+| P0-05 | Validador independiente que no dependa del código que genera la firma | 🟢 | `SecureSign.Validator` + `POST /api/validador/pdf`. RUNBOOK 12.12 — compone `PdfSignatureVerifier` + `SecureSign.Trust` sin referenciar `PdfSignaturePlaceholder`. Visor independiente ("Rúbrica Validador") en `src/frontend/validador-web`, RUNBOOK 12.20 |
 | P0-06 | Autenticidad e integridad del software distribuido (firma de código, instalador, SHA-256) | 🟡 | RUNBOOK 12.18 — SBOM y manifiesto SHA-256 por commit ya en CI (`release-manifest-firmador`). **Falta la firma Authenticode del ejecutable/instalador**: requiere comprar un certificado de firma de código (trámite de identidad jurídica, no tarea de código) |
 
 ## 2. Hallazgos P1 (informe, sección 8)
@@ -46,7 +46,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Propósito/KeyUsage/EKU/política | 🟡 | 🟡 sin cambios | Ver fila P1 arriba — EKU/CertificatePolicies siguen sin verificarse |
 | TSA RFC 3161 | 🔴 (solo interfaz) | 🟢 | `SecureSign.Tsa` |
 | PAdES-T/LT/LTA | 🔴 | 🟡 (solo T) | PAdES-T real; LT/LTA no iniciado (necesita almacén de revocación embebido en el PDF) |
-| Visor/validador integral | 🟡 | 🟡 sin cambios | `POST /api/validador/pdf` existe y produce expediente completo; **falta el visor** ("Rúbrica Validador") como aplicación separada |
+| Visor/validador integral | 🟡 | 🟢 | `POST /api/validador/pdf` produce expediente completo; visor ("Rúbrica Validador") ya existe en `src/frontend/validador-web`, RUNBOOK.md 12.20, verificado en vivo de punta a punta |
 | Registro de validaciones | 🟡 | 🟢 | `SecureSign.Audit` registra `ValidacionPadesIndependiente` por cada validación |
 | Auditoría formal | 🟡 (Audit vacío) | 🟢 | `SecureSign.Audit` completo |
 | Seguridad del Firmador Local | 🟡 (requiere hardening) | 🟢 | RUNBOOK 12.13 |
@@ -76,7 +76,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | OCSP | Sí | 🟢 |
 | Vigencia certificado | Sí | 🟢 |
 | Propósito/políticas | Sí | 🟡 (KeyUsage sí, EKU/CertificatePolicies no) |
-| Validador independiente | Sí | 🟢 (falta el visor de usuario) |
+| Validador independiente | Sí | 🟢 (API + visor, ver RUNBOOK 12.20) |
 | Registro de resultados de validación | Sí | 🟢 |
 | Pruebas automatizadas PKI | Sí | 🟡 (Trust/PAdES sí; PKCS#11 no) |
 | Manual usuario | Sí | 🟢 (`manual-usuario-firmador-local.md`) |

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rúbrica Validador — SecureSign Perú</title>
+<style>
+  :root {
+    --azul: #0b3d91;
+    --azul-claro: #e8eefb;
+    --gris: #5b6472;
+    --borde: #d7dce3;
+    --verde: #1e7e34;
+    --verde-claro: #e6f4ea;
+    --rojo: #b3261e;
+    --rojo-claro: #fbeae9;
+    --ambar: #8a5a00;
+    --ambar-claro: #fdf1dc;
+    --fondo: #f4f6f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    background: var(--fondo);
+    color: #1c2430;
+  }
+  header {
+    background: var(--azul);
+    color: white;
+    padding: 14px 20px;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header p { margin: 4px 0 0; font-size: 12px; opacity: 0.85; }
+  main { padding: 20px; max-width: 900px; margin: 0 auto; }
+  .tarjeta {
+    background: white;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .tarjeta h2 { font-size: 15px; margin: 0 0 12px; color: var(--azul); }
+  .fila { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 10px; }
+  .campo { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .campo label { font-size: 12px; color: var(--gris); }
+  .campo input {
+    padding: 7px 9px;
+    border: 1px solid var(--borde);
+    border-radius: 5px;
+    font-size: 13px;
+  }
+  .zona-carga {
+    border: 2px dashed var(--borde);
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--gris);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .zona-carga.arrastrando { border-color: var(--azul); background: var(--azul-claro); }
+  .zona-carga b { color: #1c2430; }
+  button.accion {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    background: var(--azul);
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.accion:disabled { background: #a9b6c9; cursor: not-allowed; }
+  .mensaje { font-size: 13px; padding: 8px 10px; border-radius: 5px; margin-top: 8px; }
+  .mensaje.error { background: var(--rojo-claro); color: var(--rojo); }
+  .mensaje.info { background: var(--azul-claro); color: var(--azul); }
+  .banner {
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .banner.ok { background: var(--verde-claro); color: var(--verde); }
+  .banner.no-ok { background: var(--rojo-claro); color: var(--rojo); }
+  .firma-card { border: 1px solid var(--borde); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+  .firma-card .cabecera {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fafbfc;
+    border-bottom: 1px solid var(--borde);
+  }
+  .firma-card .cabecera h3 { margin: 0; font-size: 14px; }
+  .badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 10px;
+  }
+  .badge.ok { background: var(--verde-claro); color: var(--verde); }
+  .badge.no-ok { background: var(--rojo-claro); color: var(--rojo); }
+  .badge.neutro { background: #eef0f3; color: var(--gris); }
+  .badge.ambar { background: var(--ambar-claro); color: var(--ambar); }
+  .cuerpo-firma { padding: 14px 16px; }
+  table.detalle { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
+  table.detalle td { padding: 5px 8px; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+  table.detalle td:first-child { color: var(--gris); width: 40%; }
+  .evidencia { font-size: 12px; color: var(--gris); margin: 0; padding-left: 18px; }
+  .evidencia li { margin-bottom: 4px; }
+  .aviso-no-confiable {
+    font-size: 12px;
+    background: var(--ambar-claro);
+    color: var(--ambar);
+    padding: 8px 10px;
+    border-radius: 5px;
+    margin-bottom: 12px;
+  }
+  footer { text-align: center; font-size: 11px; color: var(--gris); padding: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Rúbrica Validador — SecureSign Perú</h1>
+  <p>Validación independiente de firmas PAdES/CMS — no depende del código que generó la firma. Ver informe de preauditoría INDECOPI/IOFE, hallazgo P0-05.</p>
+</header>
+
+<main>
+  <div class="tarjeta">
+    <h2>Gateway</h2>
+    <div class="fila">
+      <div class="campo">
+        <label>URL del Gateway</label>
+        <input id="gatewayUrl" value="http://localhost:8080">
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--gris);margin:0">
+      Este validador no requiere iniciar sesión — <code>POST /api/validador/pdf</code> es público a propósito:
+      cualquier destinatario de un documento firmado debe poder confirmar su validez, sin ser cliente de SecureSign.
+    </p>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Documento a validar</h2>
+    <div class="zona-carga" id="zonaCarga">
+      <div id="textoZonaCarga">Arrastra un PDF aquí, o <b>haz clic para elegir un archivo</b></div>
+      <input type="file" id="archivo" accept="application/pdf" style="display:none">
+    </div>
+    <div class="fila" style="margin-top:12px">
+      <button class="accion" id="btnValidar" disabled>Validar documento</button>
+    </div>
+    <div id="mensajeCarga"></div>
+  </div>
+
+  <div id="resultado"></div>
+</main>
+
+<footer>
+  Este visor solo confirma lo que <code>/api/validador/pdf</code> devuelve — no incrusta ninguna lógica de
+  validación propia. Ver <code>src/backend/RUNBOOK.md</code> sección 12.12 y
+  <code>docs/08-cumplimiento/matriz-cumplimiento-indecopi.md</code>.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
