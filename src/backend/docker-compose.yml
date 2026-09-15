@@ -15,6 +15,13 @@ services:
       dockerfile: src/Gateway/SecureSign.Gateway/Dockerfile
     ports:
       - "8080:8080"
+    volumes:
+      # Llaves RSA de firma (ver RsaKeyStore, RUNBOOK.md 12.21) — en un
+      # volumen nombrado, no en la imagen ni en el repo, para que sobrevivan
+      # a un `docker compose up` sin --build y no se pierdan (ni se
+      # comiteen) por accidente. Si el volumen está vacío, el Gateway genera
+      # una llave nueva sola al arrancar.
+      - securesign_gateway_llaves:/app/llaves
     depends_on:
       - securesign-documents-api
       - securesign-signature-api
@@ -176,3 +183,4 @@ services:
 volumes:
   securesign_pg_data:
   securesign_documentos_local:
+  securesign_gateway_llaves:

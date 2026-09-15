@@ -25,7 +25,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Certificado: no basta encontrar "FIR" — falta verificar vigencia/KeyUsage/EKU/CertificatePolicies | 🟡 | `ValidadorCertificados.TienePropositoDeFirma` verifica BasicConstraints + KeyUsage (calibrado contra un DNIe real, RUNBOOK 12.9). **No verifica ExtendedKeyUsage ni CertificatePolicies/OID** — deliberadamente, porque el DNIe real de prueba declara un EKU ("Secure Email") que no es específico de firma de documentos y no existe todavía una referencia confiable del OID de política IOFE para no arriesgar falsos rechazos |
 | TSA RFC 3161 solo como interfaz, sin implementación real | 🟢 | `SecureSign.Tsa`. RUNBOOK 12.14 — cliente real probado contra 3 TSA públicas (DigiCert, Sectigo, FreeTSA); PAdES-T de punta a punta verificado |
 | Auditoría: `SecureSign.Audit` prácticamente vacío; evidencia/auditoría/validación criptográfica sin separar | 🟢 | `SecureSign.Audit` (7º servicio). RUNBOOK 12.16 — separación explícita de los tres conceptos, dos consumidores reales conectados (`CertificadoRechazadoPorConfianza`, `ValidacionPadesIndependiente`, `TicketFirmaLocalRechazado`) |
-| JWT HS256 con llave de desarrollo compartida | 🔴 | Sin cambios — sigue siendo la configuración real (`dev-only-signing-key-do-not-use-in-production`). Migración a OIDC/OAuth2 con IdP real y firma asimétrica identificada como trabajo grande, deliberadamente diferido (no iniciado) |
+| JWT HS256 con llave de desarrollo compartida | 🟡 | Migrado a RS256, llave privada solo en el Gateway (`RsaKeyStore`, nunca en `appsettings.json`), publicada como JWKS — RUNBOOK 12.21. Ningún servicio downstream vuelve a poder forjar el token de otro. Sigue faltando IdP externo real (Keycloak/Duende) y Authorization Code/PKCE para usuarios humanos — deliberadamente fuera de alcance, documentado en la propia sección 12.21 |
 | Índice de Confianza Digital no debe confundirse con confianza PKI IOFE | 🟢 (sin acción de código) | Son mecanismos separados desde el diseño original: `IIdentidadServiceClient`/`IndiceConfianzaDigital` (gate de negocio) vs. `SecureSign.Trust` (gate PKI) — `FirmarLocalHandler` consulta ambos, en ese orden, y el segundo nunca depende del primero |
 
 ## 3. Matriz general de preacreditación (informe, sección 6)
@@ -52,8 +52,8 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Seguridad del Firmador Local | 🟡 (requiere hardening) | 🟢 | RUNBOOK 12.13 |
 | Firma digital del ejecutable | 🔴 | 🔴 sin cambios | Bloqueado por procura (P0-06) |
 | Distribución/instalador firmado | 🔴 | 🔴 sin cambios | Idem |
-| JWT de producción | 🔴 | 🔴 sin cambios | Diferido (P1) |
-| Secretos productivos | 🔴 | 🔴 sin cambios | Idem |
+| JWT de producción | 🔴 | 🟡 | RS256 real, llave privada solo en el Gateway (RUNBOOK 12.21) — sigue sin ser un IdP acreditado (sin Authorization Code/PKCE, sin Keycloak/Duende externo) |
+| Secretos productivos | 🔴 | 🟡 | La llave de firma JWT ya está externalizada (`RsaKeyStore`, fuera de `appsettings.json`, RUNBOOK 12.21). `client_secret` de integradores demo y `Jwt:SecretoClienteInterno` siguen en `appsettings.json` en texto plano — pendiente |
 | Pruebas PKCS#11 automatizadas | 🔴 | 🔴 sin cambios | Necesita SoftHSM2 compilado desde fuente (no publica binario Windows); bloqueado por falta de toolchain (Visual Studio + CMake + vcpkg) en el entorno, pospuesto por decisión explícita (ver sección 5) |
 | Pruebas PAdES automatizadas | 🔴 | 🟢 | RUNBOOK 12.15 — batería que encontró y corrigió el bug real de truncamiento CMS |
 | Pruebas revocación/IOFE | 🔴 | 🟢 | RUNBOOK 12.17 — 15 pruebas, incluidas las que prueban el ataque (CRL/OCSP forjados) |
@@ -104,5 +104,5 @@ El informe exige una batería automatizada contra PKCS#11 (certificado revocado,
 1. Instalar la cadena de build (Visual Studio C++ + CMake + vcpkg), compilar SoftHSM2, y escribir la batería de pruebas PKCS#11 de la sección 13 del informe — pospuesto por costo de tiempo/disco, no por decisión técnica (ver sección 5).
 2. ~~Redactar manual de usuario y manual de administrador~~ — hecho (`manual-usuario-firmador-local.md`, `manual-administrador.md`).
 3. Adquirir un certificado de firma de código (procura, no ingeniería) para cerrar P0-06 por completo.
-4. Migrar JWT HS256 → OIDC/OAuth2 con IdP real (trabajo grande, deliberadamente diferido).
+4. ~~Migrar JWT HS256 → RS256, Gateway como único firmante~~ — hecho (RUNBOOK 12.21). Queda un IdP externo real (Keycloak/Duende) con Authorization Code/PKCE, deliberadamente diferido.
 5. Verificar la firma XAdES de la propia TSL de INDECOPI en `ListaConfianzaIofe` (limitación conocida desde RUNBOOK 12.10).

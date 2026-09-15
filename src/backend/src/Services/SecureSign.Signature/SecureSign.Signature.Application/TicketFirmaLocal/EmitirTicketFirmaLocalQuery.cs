@@ -24,7 +24,7 @@ public sealed record TicketFirmaLocalResponse(string Ticket, int ExpiraEnSegundo
 /// </summary>
 public interface IEmisorTicketFirmaLocal
 {
-    TicketFirmaLocalResponse Emitir(DatosParaEmitirTicket datos);
+    Task<TicketFirmaLocalResponse> EmitirAsync(DatosParaEmitirTicket datos, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -66,6 +66,6 @@ public sealed class EmitirTicketFirmaLocalHandler(
             request.TenantId, flujo.FirmanteUsuarioId, request.SolicitudFirmaId, request.FlujoFirmaId,
             solicitud.DocumentoId, documento.HashSha256, request.Origen);
 
-        return Result.Exitoso(emisor.Emitir(datos));
+        return Result.Exitoso(await emisor.EmitirAsync(datos, ct));
     }
 }

@@ -27,16 +27,27 @@ Ver [`RUNBOOK.md`](../../src/backend/RUNBOOK.md) secciones 1-3 para el procedimi
 ### 2.1 Autenticación (`Jwt`, todo servicio que exponga API)
 
 ```json
+// Gateway — el único que firma (RUNBOOK 12.21)
 "Jwt": {
   "Issuer": "https://api.securesign.pe",
   "InternalAudience": "securesign-internal-services",
-  "SigningKey": "dev-only-signing-key-do-not-use-in-production-change-me-32bytes",
+  "Authority": "http://gateway:8080",
+  "SecretoClienteInterno": "dev-only-internal-client-secret-do-not-use-in-production",
+  "DirectorioLlaves": "/app/llaves",
   "MinutosExpiracion": 60,
   "MinutosExpiracionInterno": 2
 }
+
+// Cualquier otro servicio — solo valida, nunca firma
+"Jwt": {
+  "Issuer": "https://api.securesign.pe",
+  "InternalAudience": "securesign-internal-services",
+  "Authority": "http://gateway:8080",
+  "MinutosExpiracion": 60
+}
 ```
 
-**`SigningKey` es HS256 (simétrica) y hoy trae literalmente un valor `dev-only-...` en `appsettings.json`.** Antes de cualquier despliegue con datos reales: reemplazar por un secreto real gestionado por un vault (Key Vault, Secrets Manager, variable de entorno inyectada en runtime — nunca committeado), y la MISMA llave en TODOS los servicios (la validan y la usan para firmar tokens internos por igual). Ver [`politica-versiones-y-cambios.md`](politica-versiones-y-cambios.md) — migrar a OIDC/firma asimétrica es un cambio MAYOR, deliberadamente diferido, documentado en la matriz de cumplimiento como hallazgo P1 abierto.
+**Ya no hay ninguna llave de firma en `appsettings.json`** (RUNBOOK 12.21): el Gateway genera y persiste su propia llave RSA en `DirectorioLlaves` (volumen Docker `securesign_gateway_llaves`, fuera del repositorio) y la publica como JWKS; cualquier otro servicio la descubre solo, vía `Authority`. Lo que SÍ sigue en texto plano en `appsettings.json`, y debe reemplazarse por un secreto real de un vault antes de cualquier despliegue con datos reales: `Jwt:SecretoClienteInterno` (solo Gateway + Documents + Signature, que llaman `POST /api/auth/interno/emitir`) y el `client_secret` de cada integrador en `ClientesDemo`.
 
 ### 2.2 Motor de confianza IOFE (`SecureSign.Trust`, en Signature.Api)
 
@@ -104,6 +115,6 @@ Este repositorio no tiene todavía un documento de procedimiento formal de incid
 Ver la tabla "Qué NO es esto todavía" en [`../../src/backend/README.md`](../../src/backend/README.md) — resumen operativo:
 
 - Las llaves ECDSA del proveedor criptográfico por defecto viven en memoria del proceso, no en HSM real (la alternativa PKCS#11/DNIe sí es real, ver sección 2.3).
-- JWT es HS256 con llave de desarrollo (sección 2.1) — no reemplazado todavía.
+- JWT ya es RS256 con la llave privada solo en el Gateway (sección 2.1, RUNBOOK 12.21) — sigue sin ser un IdP acreditado externo (Keycloak/Duende), y `Jwt:SecretoClienteInterno`/`client_secret` de integradores siguen en texto plano.
 - No hay mecanismo de auto-actualización del Firmador Local (decisión deliberada hasta que exista firma Authenticode, ver `politica-versiones-y-cambios.md` sección 5).
 - Pruebas automatizadas PKCS#11 no existen todavía (necesitan SoftHSM2 compilado desde fuente — bloqueado por falta de toolchain de compilación, ver matriz de cumplimiento sección 5).

@@ -30,6 +30,8 @@
     <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Tsa\SecureSign.Tsa.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Trust\SecureSign.Trust.csproj" />
     <ProjectReference Include="..\..\src\Services\SecureSign.Signature\SecureSign.Signature.Infrastructure\SecureSign.Signature.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\BuildingBlocks\SecureSign.Shared.Auth\SecureSign.Shared.Auth.csproj" />
+    <ProjectReference Include="..\..\src\Gateway\SecureSign.Gateway\SecureSign.Gateway.csproj" />
   </ItemGroup>
 
 </Project>

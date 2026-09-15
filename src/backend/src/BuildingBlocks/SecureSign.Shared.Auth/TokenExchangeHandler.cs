@@ -15,7 +15,7 @@ public sealed class TokenExchangeHandler(
     TokenExchangeService tokenExchange,
     string servicioActor) : DelegatingHandler
 {
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var principal = httpContextAccessor.HttpContext?.User;
 
@@ -29,11 +29,11 @@ public sealed class TokenExchangeHandler(
         // 401 en silencio (bug real encontrado al conectar SecureSign.Audit
         // a este mismo endpoint — ver RUNBOOK.md 12.16).
         var resultado = principal?.Identity?.IsAuthenticated == true
-            ? tokenExchange.Exchange(principal, servicioActor)
-            : tokenExchange.EmitirTokenDeSistema(servicioActor);
+            ? await tokenExchange.Exchange(principal, servicioActor, ct: cancellationToken)
+            : await tokenExchange.EmitirTokenDeSistema(servicioActor, ct: cancellationToken);
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resultado.AccessToken);
 
-        return base.SendAsync(request, cancellationToken);
+        return await base.SendAsync(request, cancellationToken);
     }
 }

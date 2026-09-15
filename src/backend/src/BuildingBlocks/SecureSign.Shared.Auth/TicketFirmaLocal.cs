@@ -1,8 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 
 namespace SecureSign.Shared.Auth;
 
@@ -25,18 +22,16 @@ public sealed record DatosTicketFirmaLocal(
 public sealed record TicketFirmaLocalEmitido(string Jwt, string Nonce, DateTimeOffset ExpiraEn);
 
 /// <summary>
-/// Emisor del ticket de firma de un solo uso para el Firmador Local. Ver
-/// RUNBOOK.md 12.13 sobre por qué es SEGURO reutilizar aquí la misma llave
-/// HS256 (JwtOptions) que el resto de la plataforma: el Firmador Local (un
-/// ejecutable distribuido públicamente a la máquina de cualquier usuario)
-/// NUNCA necesita verificar la firma de este JWT — solo lo REENVÍA como
-/// credencial Bearer hacia el propio backend, que es quien realmente valida
-/// la firma, la expiración y (en FirmarLocalHandler) que los claims ligados
-/// coincidan con la operación que se está completando. La llave privada de
-/// firma, por tanto, nunca sale del servidor — igual que cualquier otro
-/// token de la plataforma.
+/// Emisor del ticket de firma de un solo uso para el Firmador Local. Desde
+/// RUNBOOK.md 12.21, ya no se auto-firma localmente — se le pide al Gateway
+/// vía EmisorTokenInterno (único que tiene la llave privada). El Firmador
+/// Local (un ejecutable distribuido públicamente a la máquina de cualquier
+/// usuario) sigue sin necesitar verificar la firma de este JWT — solo lo
+/// REENVÍA como credencial Bearer hacia el propio backend, que es quien
+/// realmente valida la firma, la expiración y (en FirmarLocalHandler) que
+/// los claims ligados coincidan con la operación que se está completando.
 /// </summary>
-public sealed class EmisorTicketFirmaLocal(IOptions<JwtOptions> opciones)
+public sealed class EmisorTicketFirmaLocal(EmisorTokenInterno emisor, IOptions<JwtOptions> opciones)
 {
     public const string ClaimTipo = "ssg_tipo";
     public const string ValorTipoTicketFirmaLocal = "firmador-local-ticket";
@@ -51,37 +46,28 @@ public sealed class EmisorTicketFirmaLocal(IOptions<JwtOptions> opciones)
 
     private readonly JwtOptions _opciones = opciones.Value;
 
-    public TicketFirmaLocalEmitido Emitir(DatosTicketFirmaLocal datos, int? minutosExpiracion = null)
+    public async Task<TicketFirmaLocalEmitido> Emitir(DatosTicketFirmaLocal datos, int? minutosExpiracion = null, CancellationToken ct = default)
     {
-        var llave = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_opciones.SigningKey));
-        var credenciales = new SigningCredentials(llave, SecurityAlgorithms.HmacSha256);
         var nonce = Guid.NewGuid().ToString("N");
 
-        var claims = new List<Claim>
+        var claims = new Dictionary<string, string>
         {
-            new(ClaimsSecureSign.TenantId, datos.TenantId.ToString()),
-            new(ClaimsSecureSign.UsuarioId, datos.UsuarioId.ToString()),
-            new(ClaimsSecureSign.Scope, "firmar:local"),
-            new(JwtRegisteredClaimNames.Jti, nonce),
-            new(ClaimTipo, ValorTipoTicketFirmaLocal),
-            new(ClaimSolicitudFirmaId, datos.SolicitudFirmaId.ToString()),
-            new(ClaimFlujoFirmaId, datos.FlujoFirmaId.ToString()),
-            new(ClaimDocumentoId, datos.DocumentoId.ToString()),
-            new(ClaimDocumentoHash, datos.DocumentoHashSha256Hex),
+            [ClaimsSecureSign.TenantId] = datos.TenantId.ToString(),
+            [ClaimsSecureSign.UsuarioId] = datos.UsuarioId.ToString(),
+            [ClaimsSecureSign.Scope] = "firmar:local",
+            [JwtRegisteredClaimNames.Jti] = nonce,
+            [ClaimTipo] = ValorTipoTicketFirmaLocal,
+            [ClaimSolicitudFirmaId] = datos.SolicitudFirmaId.ToString(),
+            [ClaimFlujoFirmaId] = datos.FlujoFirmaId.ToString(),
+            [ClaimDocumentoId] = datos.DocumentoId.ToString(),
+            [ClaimDocumentoHash] = datos.DocumentoHashSha256Hex,
         };
         if (!string.IsNullOrEmpty(datos.Origen))
-            claims.Add(new Claim(ClaimOrigen, datos.Origen));
+            claims[ClaimOrigen] = datos.Origen;
 
-        var expira = DateTime.UtcNow.AddMinutes(minutosExpiracion ?? MinutosExpiracionPorDefecto);
-
-        var token = new JwtSecurityToken(
-            issuer: _opciones.Issuer,
-            audience: _opciones.Audience,
-            claims: claims,
-            expires: expira,
-            signingCredentials: credenciales);
-
-        var jwt = new JwtSecurityTokenHandler().WriteToken(token);
-        return new TicketFirmaLocalEmitido(jwt, nonce, expira);
+        int minutos = minutosExpiracion ?? MinutosExpiracionPorDefecto;
+        var resultado = await emisor.EmitirAsync(claims, _opciones.Audience, minutos, ct);
+        var expira = DateTimeOffset.UtcNow.AddMinutes(minutos);
+        return new TicketFirmaLocalEmitido(resultado.AccessToken, nonce, expira);
     }
 }
