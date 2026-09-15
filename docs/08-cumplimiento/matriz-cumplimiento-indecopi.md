@@ -84,7 +84,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Manual integración | Sí | 🟢 (`docs/05-integracion/manual-integracion-api.md`, base existente) |
 | Matriz INDECOPI | Sí | 🟢 (este documento) |
 | SBOM | Sí | 🟢 (RUNBOOK 12.18) |
-| SAST/SCA | Sí | 🔴 |
+| SAST/SCA | Sí | 🟢 (RUNBOOK 12.19) |
 | Pentest | Recomendado | 🔴 |
 | TSA | Según alcance | 🟢 |
 | XAdES | No para v1 | ⚫ |

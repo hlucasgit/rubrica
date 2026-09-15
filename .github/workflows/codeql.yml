@@ -1,0 +1,74 @@
+name: CodeQL — análisis estático (SAST)
+
+# Informe de preauditoría INDECOPI/IOFE, §17: "SAST/SCA — Sí obligatorio".
+# Esto es el SAST: CodeQL es el motor de análisis estático propio de
+# GitHub (primera parte, no una herramienta de terceros) — analiza el
+# código real compilado, no solo patrones de texto. Mismo split
+# Linux/Windows que ci.yml (ver hallazgo P0-04): SecureSign.FirmadorLocal
+# es net8.0-windows + WinForms y no compila en un runner Linux.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Corrida semanal completa, independiente de si hubo push — para
+    # detectar advisories de CodeQL nuevos contra código que no cambió.
+    - cron: "17 8 * * 1"
+
+jobs:
+  analyze-backend:
+    name: Analizar backend (Ubuntu)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: manual
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restaurar y compilar
+        run: |
+          dotnet restore src/backend/SecureSign.Backend.slnf
+          dotnet build src/backend/SecureSign.Backend.slnf --no-restore --configuration Release
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:csharp-backend"
+
+  analyze-firmador-local:
+    name: Analizar Firmador Local (Windows)
+    runs-on: windows-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: manual
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restaurar y compilar
+        run: |
+          dotnet restore src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj
+          dotnet build src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj --no-restore --configuration Release
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:csharp-firmador-local"

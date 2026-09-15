@@ -66,6 +66,23 @@ jobs:
           path: sbom/bom.json
           retention-days: 90
 
+      # Informe de preauditoría INDECOPI/IOFE, §17: "SAST/SCA — Sí
+      # obligatorio". Esto es el SCA: dotnet list package --vulnerable ya
+      # trae el analizador de NuGet Audit incorporado (misma base de datos
+      # de advisories que GitHub) — sin instalar nada de terceros. Falla el
+      # build si aparece cualquier paquete (directo o transitivo) con una
+      # vulnerabilidad conocida. DOTNET_CLI_UI_LANGUAGE=en fuerza el texto
+      # en inglés para que el grep no dependa del locale del runner.
+      - name: SCA — dependencias con vulnerabilidades conocidas
+        env:
+          DOTNET_CLI_UI_LANGUAGE: en
+        run: |
+          dotnet list src/backend/SecureSign.Backend.slnf package --vulnerable --include-transitive | tee sca-report.txt
+          if grep -q "has the following vulnerable packages" sca-report.txt; then
+            echo "::error::Se encontraron dependencias con vulnerabilidades conocidas — ver el reporte arriba."
+            exit 1
+          fi
+
       - name: Crear bases de datos de cada servicio
         env:
           PGPASSWORD: securesign_dev_only
