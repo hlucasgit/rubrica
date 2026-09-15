@@ -49,6 +49,23 @@ jobs:
       - name: Pruebas unitarias
         run: dotnet test src/backend/tests/SecureSign.UnitTests/SecureSign.UnitTests.csproj --no-build --configuration Release
 
+      # Informe de preauditoría INDECOPI/IOFE, §14/15: "Inventario/SBOM —
+      # Crear". Genera un inventario real de dependencias (CycloneDX) en
+      # cada build, no solo para releases — así un PR que introduce una
+      # dependencia nueva queda reflejado de inmediato.
+      - name: Generar SBOM del backend (CycloneDX)
+        run: |
+          dotnet tool install --global CycloneDX
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet-CycloneDX src/backend/SecureSign.Backend.slnf -o sbom --exclude-test-projects -F Json -sn SecureSign-Backend -sv ${{ github.sha }}
+
+      - name: Publicar SBOM del backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-backend
+          path: sbom/bom.json
+          retention-days: 90
+
       - name: Crear bases de datos de cada servicio
         env:
           PGPASSWORD: securesign_dev_only
@@ -96,3 +113,60 @@ jobs:
 
       - name: Compilar
         run: dotnet build src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj --no-restore --configuration Release
+
+  # Informe de preauditoría INDECOPI/IOFE, hallazgo P0-06 ("Autenticidad e
+  # integridad del software distribuido") y §14 (release controlado): esto
+  # cubre la parte que SÍ se puede hacer sin comprar nada todavía — SBOM del
+  # ejecutable distribuido y un manifiesto SHA-256 versionado por commit.
+  # La firma Authenticode del binario/instalador queda pendiente porque
+  # requiere un certificado de firma de código real, que es un trámite de
+  # compra/identidad jurídica, no una tarea de código (ver RUNBOOK.md 12.11).
+  # Solo corre en push a main — no en cada PR — porque es, conceptualmente,
+  # el job "CI Release" que el informe pide separado del build de validación.
+  release-manifest-firmador:
+    needs: [backend-build-test-migrate, firmador-local-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restaurar
+        run: dotnet restore src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj
+
+      - name: Generar SBOM del Firmador Local (CycloneDX)
+        shell: pwsh
+        run: |
+          dotnet tool install --global CycloneDX
+          $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+          dotnet-CycloneDX src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj -o sbom -F Json -sn SecureSign-FirmadorLocal -sv ${{ github.sha }}
+
+      # Sin --self-contained: el binario evaluable/distribuido debe ser
+      # reproducible desde el mismo commit, sin publicar todo el runtime de
+      # .NET todavía (eso queda para cuando exista firma Authenticode real).
+      - name: Publicar binario Release
+        run: dotnet publish src/backend/src/Tools/SecureSign.FirmadorLocal/SecureSign.FirmadorLocal.csproj -c Release -r win-x64 --self-contained false -o publish
+
+      - name: Generar manifiesto SHA-256
+        shell: pwsh
+        run: |
+          $lineas = @("# SecureSign Firmador Local — manifiesto de artefacto", "commit: ${{ github.sha }}", "generado: $(Get-Date -AsUTC -Format o)", "")
+          Get-ChildItem -Path publish -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $hash = Get-FileHash -Path $_.FullName -Algorithm SHA256
+            $rutaRelativa = $_.FullName.Substring((Resolve-Path publish).Path.Length + 1)
+            $lineas += "$($hash.Hash)  $rutaRelativa"
+          }
+          $lineas | Set-Content -Path publish/SHA256SUMS.txt -Encoding utf8
+
+      - name: Publicar artefacto (binario + SBOM + manifiesto)
+        uses: actions/upload-artifact@v4
+        with:
+          name: securesign-firmador-local-${{ github.sha }}
+          path: |
+            publish/
+            sbom/bom.json
+          retention-days: 90

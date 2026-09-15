@@ -198,6 +198,43 @@ public sealed class ValidadorCertificadosTests : IDisposable
     }
 
     [Fact]
+    public async Task Certificado_aun_no_vigente_no_es_vigente()
+    {
+        var e = Construir(notBeforeHoja: DateTime.UtcNow.AddDays(30), notAfterHoja: DateTime.UtcNow.AddYears(1));
+        var resultado = await e.Validador.ValidarAsync(e.Hoja, DateTimeOffset.UtcNow);
+        Assert.False(resultado.CertificadoVigente);
+        Assert.False(resultado.EstadoFinal);
+    }
+
+    [Fact]
+    public async Task OCSP_sin_respuesta_es_indeterminado_no_valido()
+    {
+        var e = Construir(configurarRevocacion: (handler, urlCrl, urlOcsp, intermedia, hoja) =>
+        {
+            // No se registra ninguna ruta para urlOcsp — HandlerHttpFalso
+            // responde 404, simulando un responder OCSP caído.
+            handler.ResponderBytes(urlCrl, CadenaDePruebaHelper.GenerarCrl(intermedia, []), "application/pkix-crl");
+        });
+
+        var resultado = await e.Validador.ValidarAsync(e.Hoja, DateTimeOffset.UtcNow);
+        Assert.Equal(EstadoRevocacion.Unavailable, resultado.Revocacion.Ocsp);
+    }
+
+    [Fact]
+    public async Task CRL_vencida_es_indeterminada_no_valida()
+    {
+        var e = Construir(configurarRevocacion: (handler, urlCrl, urlOcsp, intermedia, hoja) =>
+        {
+            byte[] crlVencida = CadenaDePruebaHelper.GenerarCrl(intermedia, [], proximaActualizacion: DateTime.UtcNow.AddDays(-1));
+            handler.ResponderBytes(urlCrl, crlVencida, "application/pkix-crl");
+            handler.Responder(urlOcsp, req => ResponderOcsp(req, intermedia, CertificateStatus.Good));
+        });
+
+        var resultado = await e.Validador.ValidarAsync(e.Hoja, DateTimeOffset.UtcNow);
+        Assert.Equal(EstadoRevocacion.Unavailable, resultado.Revocacion.Crl);
+    }
+
+    [Fact]
     public async Task CRL_firmada_por_una_llave_que_no_es_el_emisor_se_descarta_sin_confiar_en_su_contenido()
     {
         var e = Construir(configurarRevocacion: (handler, urlCrl, urlOcsp, intermedia, hoja) =>
