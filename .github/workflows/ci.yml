@@ -57,22 +57,25 @@ jobs:
           psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_signature;"
           psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_evidence;"
           psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_identity;"
+          psql -h localhost -U securesign -d postgres -c "CREATE DATABASE securesign_audit;"
 
       # Este es el paso que antes hacía cada Api sola al arrancar
       # (Database.Migrate() en Program.cs) — ahora es un paso de pipeline
       # explícito, visible y que falla el build si una migración es inválida,
       # antes de intentar desplegar nada.
-      - name: Aplicar migraciones (documents, signature, evidence, identity)
+      - name: Aplicar migraciones (documents, signature, evidence, identity, audit)
         env:
           ConnectionStrings__Postgres_Documents: "Host=localhost;Port=5432;Database=securesign_documents;Username=securesign;Password=securesign_dev_only"
           ConnectionStrings__Postgres_Signature: "Host=localhost;Port=5432;Database=securesign_signature;Username=securesign;Password=securesign_dev_only"
           ConnectionStrings__Postgres_Evidence: "Host=localhost;Port=5432;Database=securesign_evidence;Username=securesign;Password=securesign_dev_only"
           ConnectionStrings__Postgres_Identity: "Host=localhost;Port=5432;Database=securesign_identity;Username=securesign;Password=securesign_dev_only"
+          ConnectionStrings__Postgres_Audit: "Host=localhost;Port=5432;Database=securesign_audit;Username=securesign;Password=securesign_dev_only"
         run: |
           ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Documents" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- documents
           ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Signature" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- signature
           ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Evidence" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- evidence
           ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Identity" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- identity
+          ConnectionStrings__Postgres="$ConnectionStrings__Postgres_Audit" dotnet run --project src/backend/src/Migrator/SecureSign.Migrator.csproj --no-build --configuration Release -- audit
 
   firmador-local-build:
     # Solo compila (WinForms + PKCS11Interop exigen Windows) — validar que

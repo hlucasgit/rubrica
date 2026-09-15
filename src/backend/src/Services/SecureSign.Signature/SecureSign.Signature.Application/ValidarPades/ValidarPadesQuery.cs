@@ -1,5 +1,6 @@
 using MediatR;
 using SecureSign.Domain.Primitives;
+using SecureSign.Signature.Application.Clients;
 
 namespace SecureSign.Signature.Application.ValidarPades;
 
@@ -53,7 +54,7 @@ public interface IValidadorDocumentoPadesIndependiente
 /// <param name="Pdf">El PDF completo tal cual se recibió — cualquier documento PAdES, generado por SecureSign o por un tercero.</param>
 public sealed record ValidarPadesQuery(byte[] Pdf) : IRequest<Result<ResultadoValidarPadesResponse>>;
 
-public sealed class ValidarPadesHandler(IValidadorDocumentoPadesIndependiente validador)
+public sealed class ValidarPadesHandler(IValidadorDocumentoPadesIndependiente validador, IAuditoriaServiceClient auditoria)
     : IRequestHandler<ValidarPadesQuery, Result<ResultadoValidarPadesResponse>>
 {
     public async Task<Result<ResultadoValidarPadesResponse>> Handle(ValidarPadesQuery request, CancellationToken ct)
@@ -62,6 +63,22 @@ public sealed class ValidarPadesHandler(IValidadorDocumentoPadesIndependiente va
             return Result.Fallido<ResultadoValidarPadesResponse>("El documento recibido está vacío.");
 
         var resultado = await validador.ValidarAsync(request.Pdf, ct);
+
+        // Registro de validación criptográfica (informe de preauditoría
+        // INDECOPI/IOFE, sección 8: el tercer concepto, distinto de
+        // evidencia de negocio y auditoría técnica genérica) — este
+        // endpoint es público a propósito (RUNBOOK.md 12.12: cualquier
+        // destinatario de un documento debe poder validarlo), así que no
+        // hay tenant que ligar; se registra igual, sin tenant.
+        try
+        {
+            await auditoria.RegistrarAsync(
+                "ValidacionPadesIndependiente",
+                $"{resultado.TotalFirmas} firma(s), documentoValido={resultado.DocumentoValido}",
+                tenantId: null, ct);
+        }
+        catch (HttpRequestException) { /* la auditoría nunca debe impedir que se devuelva el resultado real de la validación */ }
+
         return Result.Exitoso(resultado);
     }
 }

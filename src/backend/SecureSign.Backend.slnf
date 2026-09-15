@@ -31,6 +31,8 @@
       "src\\Services\\SecureSign.Identity\\SecureSign.Identity.Api\\SecureSign.Identity.Api.csproj",
       "src\\Services\\SecureSign.Audit\\SecureSign.Audit.Domain\\SecureSign.Audit.Domain.csproj",
       "src\\Services\\SecureSign.Audit\\SecureSign.Audit.Application\\SecureSign.Audit.Application.csproj",
+      "src\\Services\\SecureSign.Audit\\SecureSign.Audit.Infrastructure\\SecureSign.Audit.Infrastructure.csproj",
+      "src\\Services\\SecureSign.Audit\\SecureSign.Audit.Api\\SecureSign.Audit.Api.csproj",
       "src\\Gateway\\SecureSign.Gateway\\SecureSign.Gateway.csproj",
       "src\\Migrator\\SecureSign.Migrator.csproj",
       "tests\\SecureSign.UnitTests\\SecureSign.UnitTests.csproj"

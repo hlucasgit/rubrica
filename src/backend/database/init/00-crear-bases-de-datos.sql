@@ -14,3 +14,4 @@ CREATE DATABASE securesign_documents;
 CREATE DATABASE securesign_signature;
 CREATE DATABASE securesign_evidence;
 CREATE DATABASE securesign_identity;
+CREATE DATABASE securesign_audit;

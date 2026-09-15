@@ -20,6 +20,7 @@ services:
       - securesign-signature-api
       - securesign-evidence-api
       - securesign-identity-api
+      - securesign-audit-api
 
   # --- Migraciones (una por servicio con estado, corren una vez y terminan) ---
 
@@ -63,6 +64,17 @@ services:
     command: ["evidence"]
     environment:
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=securesign_evidence;Username=securesign;Password=securesign_dev_only"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  securesign-audit-migrate:
+    build:
+      context: .
+      dockerfile: src/Migrator/Dockerfile
+    command: ["audit"]
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=securesign_audit;Username=securesign;Password=securesign_dev_only"
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,6 +134,15 @@ services:
     expose: ["8080"]
     depends_on:
       securesign-evidence-migrate:
+        condition: service_completed_successfully
+
+  securesign-audit-api:
+    build:
+      context: .
+      dockerfile: src/Services/SecureSign.Audit/SecureSign.Audit.Api/Dockerfile
+    expose: ["8080"]
+    depends_on:
+      securesign-audit-migrate:
         condition: service_completed_successfully
 
   securesign-crypto-api:

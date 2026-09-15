@@ -2,7 +2,7 @@
 
 ## Qué es esto
 
-Un sistema **real, compilable y operativo de punta a punta** — no solo lógica de dominio aislada. Los 6 servicios (Gateway, Documentos, Firma, Criptografía, Evidencia, Identidad) se ejecutan como procesos independientes, con **persistencia real en PostgreSQL** (una base de datos por servicio), se autentican entre sí con JWT real, y ejecutan el flujo completo de firma con una firma criptográfica ECDSA genuina **condicionada a un Índice de Confianza Digital real**. Ver [`RUNBOOK.md`](RUNBOOK.md) para levantarlo y probarlo — todo lo documentado ahí fue efectivamente ejecutado, con las respuestas reales incluidas.
+Un sistema **real, compilable y operativo de punta a punta** — no solo lógica de dominio aislada. Los 7 servicios (Gateway, Documentos, Firma, Criptografía, Evidencia, Identidad, Auditoría) se ejecutan como procesos independientes, con **persistencia real en PostgreSQL** (una base de datos por servicio), se autentican entre sí con JWT real, y ejecutan el flujo completo de firma con una firma criptográfica ECDSA genuina **condicionada a un Índice de Confianza Digital real**. Ver [`RUNBOOK.md`](RUNBOOK.md) para levantarlo y probarlo — todo lo documentado ahí fue efectivamente ejecutado, con las respuestas reales incluidas.
 
 **La persistencia fue verificada sobreviviendo un reinicio real**: se firmó un documento, se mataron los procesos de Documentos/Firma/Evidencia, se reiniciaron apuntando a la misma base de datos, y el documento, la solicitud de firma y la cadena de evidencia se recuperaron intactos vía API — no es una afirmación de diseño, es un resultado observado.
 
@@ -27,7 +27,7 @@ Implementa, además de la orquestación, la lógica de dominio central descrita 
 
 **Token exchange real (RFC 8693)**: cada llamada servicio-a-servicio (Firma → Identidad/Documentos/Criptografía/Evidencia, Documentos → Evidencia) intercambia el token del llamador original por uno nuevo, propio, con audiencia distinta (`securesign-internal-services`), scope mínimo (`internal-service`, nunca las concesiones de negocio del cliente externo) y vida corta (2 minutos) — ver `TokenExchangeService`. Verificado con logs de auditoría reales: el token que ve Documentos en el registro inicial trae `scope=documentos.crear documentos.leer firmas.crear...` (el del cliente externo); el que ve al ser llamado por Firma trae `scope=internal-service actorInterno=securesign-signature-api`. Ningún servicio interno ve nunca el scope de negocio del cliente original.
 
-**Migraciones como paso de pipeline, no de arranque**: ningún servicio llama a `Database.Migrate()` en su propio `Program.cs` — eso lo hace [`SecureSign.Migrator`](src/Migrator), una herramienta separada (`dotnet SecureSign.Migrator.dll <documents|signature|evidence|identity>`) invocada explícitamente antes de arrancar cada servicio, tanto en `docker-compose.yml` (jobs `*-migrate` con `service_completed_successfully`) como en [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (que además la ejecuta de verdad contra un PostgreSQL efímero en cada push/PR, junto con el build y las 48 pruebas). Verificado: se corrió el Migrator para las 4 bases, se relanzaron los 6 servicios sin que ninguno migrara nada por su cuenta, y el flujo completo de firma siguió funcionando igual.
+**Migraciones como paso de pipeline, no de arranque**: ningún servicio llama a `Database.Migrate()` en su propio `Program.cs` — eso lo hace [`SecureSign.Migrator`](src/Migrator), una herramienta separada (`dotnet SecureSign.Migrator.dll <documents|signature|evidence|identity|audit>`) invocada explícitamente antes de arrancar cada servicio, tanto en `docker-compose.yml` (jobs `*-migrate` con `service_completed_successfully`) como en [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) (que además la ejecuta de verdad contra un PostgreSQL efímero en cada push/PR, junto con el build y las 48 pruebas). Verificado: se corrió el Migrator para las 4 bases, se relanzaron los 6 servicios sin que ninguno migrara nada por su cuenta, y el flujo completo de firma siguió funcionando igual.
 
 ## Un bug real encontrado y corregido al conectar PostgreSQL
 
@@ -70,14 +70,14 @@ src/backend/
     SecureSign.Crypto/            # ídem — abstracción HSM/KMS (sin persistencia propia)
     SecureSign.Evidence/          # ídem — motor de evidencia (hash-chain + Merkle), EF Core + PostgreSQL
     SecureSign.Identity/          # ídem — Índice de Confianza Digital, EF Core + PostgreSQL, conectado al flujo de firma
-    SecureSign.Audit/             # Domain + Application — scaffold vacío, mismo patrón que Evidence
+    SecureSign.Audit/             # Servicio completo (6º) — auditoría técnica y registro de validación criptográfica (RUNBOOK 12.16)
   src/Gateway/SecureSign.Gateway/ # YARP reverse proxy + emisión de tokens OAuth2
   src/Migrator/                   # SecureSign.Migrator — aplica migraciones EF Core como paso explícito (ver docker-compose.yml y .github/workflows/ci.yml)
   tests/SecureSign.UnitTests/     # 48 pruebas — lógica de dominio + PAdES/CMS/TSA (RUNBOOK 12.15)
   database/                       # schema.sql, indexes.sql, stored-procedures.sql — diseño de referencia (ver tabla arriba)
     init/                         # Script que crea las 4 bases de datos (una por servicio con estado) en el contenedor Postgres
   ejemplos-integracion/           # Script real de integración externa (firmar-documento.sh)
-  docker-compose.yml              # Levanta los 6 servicios + jobs de migración + PostgreSQL + Redis
+  docker-compose.yml              # Levanta los 7 servicios + jobs de migración + PostgreSQL + Redis
   RUNBOOK.md                      # Cómo ejecutar todo y firmar un documento, paso a paso, verificado
 ```
 

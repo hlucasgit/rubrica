@@ -64,4 +64,38 @@ public sealed class TokenExchangeService(IOptions<JwtOptions> opciones)
         var jwt = new JwtSecurityTokenHandler().WriteToken(token);
         return new TokenExchangeResult(jwt, _opciones.MinutosExpiracionInterno * 60);
     }
+
+    /// <summary>
+    /// Emite un token interno SIN partir de un llamador autenticado — para
+    /// llamadas servicio-a-servicio que se originan en un endpoint público
+    /// (p. ej. SecureSign.Validator, deliberadamente <c>[AllowAnonymous]</c>:
+    /// cualquier destinatario de un documento debe poder validarlo, ver
+    /// RUNBOOK.md 12.12). <see cref="Exchange"/> exige un <c>tenant_id</c>
+    /// del token original y por eso no sirve aquí — no hay tenant que
+    /// preservar cuando quien llama no se autenticó. Mismo alcance, misma
+    /// audiencia y vida corta que un intercambio normal; sin `tenant_id`.
+    /// </summary>
+    public TokenExchangeResult EmitirTokenDeSistema(string servicioActor, string scopeInterno = "internal-service")
+    {
+        var llave = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_opciones.SigningKey));
+        var credenciales = new SigningCredentials(llave, SecurityAlgorithms.HmacSha256);
+
+        var claims = new List<Claim>
+        {
+            new(ClaimsSecureSign.Scope, scopeInterno),
+            new("act", servicioActor)
+        };
+
+        var expira = DateTime.UtcNow.AddMinutes(_opciones.MinutosExpiracionInterno);
+
+        var token = new JwtSecurityToken(
+            issuer: _opciones.Issuer,
+            audience: _opciones.InternalAudience,
+            claims: claims,
+            expires: expira,
+            signingCredentials: credenciales);
+
+        var jwt = new JwtSecurityTokenHandler().WriteToken(token);
+        return new TokenExchangeResult(jwt, _opciones.MinutosExpiracionInterno * 60);
+    }
 }

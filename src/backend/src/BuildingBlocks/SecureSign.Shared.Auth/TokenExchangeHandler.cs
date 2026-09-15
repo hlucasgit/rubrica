@@ -18,11 +18,21 @@ public sealed class TokenExchangeHandler(
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var principal = httpContextAccessor.HttpContext?.User;
-        if (principal?.Identity?.IsAuthenticated == true)
-        {
-            var resultado = tokenExchange.Exchange(principal, servicioActor);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resultado.AccessToken);
-        }
+
+        // Si quien llama a ESTE servicio se autenticó, se preserva su
+        // tenant_id en el token interno (Exchange). Si no — p. ej. una
+        // llamada interna disparada desde un endpoint deliberadamente
+        // público como SecureSign.Validator (ver RUNBOOK.md 12.12/12.16) —
+        // no hay tenant que preservar, pero la llamada interna SIGUE
+        // necesitando credencial: antes simplemente no se ponía ningún
+        // header Authorization, y el servicio de destino la rechazaba con
+        // 401 en silencio (bug real encontrado al conectar SecureSign.Audit
+        // a este mismo endpoint — ver RUNBOOK.md 12.16).
+        var resultado = principal?.Identity?.IsAuthenticated == true
+            ? tokenExchange.Exchange(principal, servicioActor)
+            : tokenExchange.EmitirTokenDeSistema(servicioActor);
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resultado.AccessToken);
 
         return base.SendAsync(request, cancellationToken);
     }

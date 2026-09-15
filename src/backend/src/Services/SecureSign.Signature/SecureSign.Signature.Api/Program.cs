@@ -82,6 +82,8 @@ builder.Services.AddSecureSignInternalHttpClient<IEvidenciasServiceClient, Evide
     new Uri(serviciosInternos["EvidenciasApiUrl"]!), ActorServicio);
 builder.Services.AddSecureSignInternalHttpClient<IIdentidadServiceClient, IdentidadServiceClient>(
     new Uri(serviciosInternos["IdentidadApiUrl"]!), ActorServicio);
+builder.Services.AddSecureSignInternalHttpClient<IAuditoriaServiceClient, AuditoriaServiceClient>(
+    new Uri(serviciosInternos["AuditoriaApiUrl"]!), ActorServicio);
 
 var app = builder.Build();
 

@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Services\SecureSign.Signature\SecureSign.Signature.Infrastructure\SecureSign.Signature.Infrastructure.csproj" />
     <ProjectReference Include="..\Services\SecureSign.Evidence\SecureSign.Evidence.Infrastructure\SecureSign.Evidence.Infrastructure.csproj" />
     <ProjectReference Include="..\Services\SecureSign.Identity\SecureSign.Identity.Infrastructure\SecureSign.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\Services\SecureSign.Audit\SecureSign.Audit.Infrastructure\SecureSign.Audit.Infrastructure.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

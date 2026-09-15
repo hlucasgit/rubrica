@@ -12,7 +12,7 @@
 // nuevo contra un esquema con el que no es compatible.
 //
 // Uso:
-//   dotnet SecureSign.Migrator.dll <documents|signature|evidence|identity>
+//   dotnet SecureSign.Migrator.dll <documents|signature|evidence|identity|audit>
 //   (requiere la variable de entorno ConnectionStrings__Postgres)
 //
 // Ver docker-compose.yml (servicios "*-migrate") y
@@ -20,6 +20,7 @@
 // =============================================================================
 
 using Microsoft.EntityFrameworkCore;
+using SecureSign.Audit.Infrastructure.Persistence;
 using SecureSign.Documents.Infrastructure.Persistence;
 using SecureSign.Evidence.Infrastructure.Persistence;
 using SecureSign.Identity.Infrastructure.Persistence;
@@ -27,7 +28,7 @@ using SecureSign.Signature.Infrastructure.Persistence;
 
 if (args.Length != 1)
 {
-    Console.Error.WriteLine("Uso: dotnet SecureSign.Migrator.dll <documents|signature|evidence|identity>");
+    Console.Error.WriteLine("Uso: dotnet SecureSign.Migrator.dll <documents|signature|evidence|identity|audit>");
     return 1;
 }
 
@@ -56,8 +57,11 @@ try
         case "identity":
             await MigrarAsync(new IdentityDbContext(Opciones<IdentityDbContext>(connectionString)));
             break;
+        case "audit":
+            await MigrarAsync(new AuditDbContext(Opciones<AuditDbContext>(connectionString)));
+            break;
         default:
-            Console.Error.WriteLine($"Servicio desconocido: '{args[0]}'. Usar documents|signature|evidence|identity.");
+            Console.Error.WriteLine($"Servicio desconocido: '{args[0]}'. Usar documents|signature|evidence|identity|audit.");
             return 1;
     }
 }

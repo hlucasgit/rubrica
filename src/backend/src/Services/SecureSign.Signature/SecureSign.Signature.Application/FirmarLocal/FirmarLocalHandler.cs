@@ -24,7 +24,8 @@ public sealed class FirmarLocalHandler(
     IIdentidadServiceClient identidad,
     IDocumentosServiceClient documentos,
     IEvidenciasServiceClient evidencias,
-    IValidadorConfianzaFirmante validadorConfianza)
+    IValidadorConfianzaFirmante validadorConfianza,
+    IAuditoriaServiceClient auditoria)
     : IRequestHandler<FirmarLocalCommand, Result<FirmarDocumentoResponse>>
 {
     public async Task<Result<FirmarDocumentoResponse>> Handle(FirmarLocalCommand request, CancellationToken ct)
@@ -100,8 +101,25 @@ public sealed class FirmarLocalHandler(
         // "válido" que un DNIe real. Ver RUNBOOK.md 12.9.
         var confianzaCertificado = await validadorConfianza.ValidarAsync(certificado, DateTimeOffset.UtcNow, ct);
         if (!confianzaCertificado.Confiable)
+        {
+            // Auditoría técnica (distinta de la evidencia de negocio de
+            // abajo — ver informe de preauditoría INDECOPI/IOFE, sección 8,
+            // y RUNBOOK.md 12.16): un intento de firma con un certificado
+            // que el motor de confianza rechazó es exactamente el tipo de
+            // evento de seguridad que un registro de auditoría técnica debe
+            // capturar, se complete o no la firma.
+            try
+            {
+                await auditoria.RegistrarAsync(
+                    "CertificadoRechazadoPorConfianza",
+                    $"Solicitud {request.SolicitudFirmaId}, flujo {request.FlujoFirmaId}: " + string.Join(" | ", confianzaCertificado.Evidencia),
+                    request.TenantId, ct);
+            }
+            catch (HttpRequestException) { /* la auditoría nunca debe impedir que se reporte el rechazo real al llamador */ }
+
             return Result.Fallido<FirmarDocumentoResponse>(
                 "El certificado del firmante no pasó la validación de confianza IOFE: " + string.Join(" | ", confianzaCertificado.Evidencia));
+        }
 
         // Fail closed (ver informe de preauditoría INDECOPI/IOFE, hallazgo
         // P0-03): si el documento es PDF, el Firmador Local DEBE haber
