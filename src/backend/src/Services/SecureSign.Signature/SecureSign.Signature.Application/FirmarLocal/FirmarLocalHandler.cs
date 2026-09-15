@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using MediatR;
 using SecureSign.Domain.Primitives;
@@ -7,6 +8,7 @@ using SecureSign.Signature.Application.Clients;
 using SecureSign.Signature.Application.Confianza;
 using SecureSign.Signature.Application.FirmarDocumento;
 using SecureSign.Signature.Domain;
+using SecureSign.Tsa;
 
 namespace SecureSign.Signature.Application.FirmarLocal;
 
@@ -25,7 +27,9 @@ public sealed class FirmarLocalHandler(
     IDocumentosServiceClient documentos,
     IEvidenciasServiceClient evidencias,
     IValidadorConfianzaFirmante validadorConfianza,
-    IAuditoriaServiceClient auditoria)
+    IAuditoriaServiceClient auditoria,
+    ClienteTsaRfc3161 clienteTsa,
+    OpcionesTsa opcionesTsa)
     : IRequestHandler<FirmarLocalCommand, Result<FirmarDocumentoResponse>>
 {
     public async Task<Result<FirmarDocumentoResponse>> Handle(FirmarLocalCommand request, CancellationToken ct)
@@ -180,6 +184,21 @@ public sealed class FirmarLocalHandler(
                 documentoPades = PdfDssWriter.AgregarDss(documentoPades, material);
             }
             catch (Exception) { /* PAdES-LT es una mejora, no un requisito para que la firma sea válida — ver comentario arriba */ }
+
+            // PAdES-LTA (RUNBOOK.md 12.24): sella con RFC 3161 el documento
+            // TAL COMO QUEDÓ (firma + DSS incluidos) — así, si algún día el
+            // algoritmo de firma o el certificado de la TSA del sello de
+            // PAdES-T quedan débiles, todavía queda una prueba independiente
+            // de que el documento (con su DSS) ya existía en este instante.
+            // Mismo best-effort que arriba: nunca aborta la firma real.
+            try
+            {
+                var preparadoSello = PdfSignaturePlaceholder.PrepararSelloDeArchivo(documentoPades, DateTimeOffset.UtcNow);
+                byte[] hashParaSellar = SHA256.HashData(preparadoSello.ContenidoCubierto);
+                var sello = await clienteTsa.SellarAsync(hashParaSellar, opcionesTsa.UrlTsa, ct);
+                documentoPades = PdfSignaturePlaceholder.Inyectar(preparadoSello, sello.TokenDer);
+            }
+            catch (Exception) { /* PAdES-LTA es una mejora, no un requisito para que la firma sea válida — ver comentario arriba */ }
         }
 
         var confirmacion = solicitud.ConfirmarFirma(request.FlujoFirmaId);

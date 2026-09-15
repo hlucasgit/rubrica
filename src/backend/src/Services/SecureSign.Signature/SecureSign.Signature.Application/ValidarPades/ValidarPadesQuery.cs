@@ -34,10 +34,23 @@ public sealed record FirmaValidadaDto(
     IReadOnlyList<string> Evidencia,
     string? Error);
 
+/// <summary>
+/// Sello de tiempo de ARCHIVO (PAdES-LTA, RUNBOOK.md 12.24) — no es la firma
+/// de un firmante, es una prueba independiente de que el documento (con sus
+/// firmas y su DSS) ya existía en <see cref="GenTime"/>. Nunca afecta
+/// <see cref="ResultadoValidarPadesResponse.DocumentoValido"/>.
+/// </summary>
+public sealed record SelloArchivoDto(
+    bool Valido,
+    DateTimeOffset? GenTime,
+    string? AutoridadTsa,
+    string? Error);
+
 public sealed record ResultadoValidarPadesResponse(
     int TotalFirmas,
     bool DocumentoValido,
-    IReadOnlyList<FirmaValidadaDto> Firmas);
+    IReadOnlyList<FirmaValidadaDto> Firmas,
+    IReadOnlyList<SelloArchivoDto> SellosDeArchivo);
 
 /// <summary>
 /// Puerto hacia el validador independiente de PAdES — la implementación

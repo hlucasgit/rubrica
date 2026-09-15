@@ -291,7 +291,31 @@ public static class PdfSignaturePlaceholder
         byte[] pdfActual,
         string nombreFirmante,
         string razon,
-        DateTimeOffset momento)
+        DateTimeOffset momento) =>
+        PrepararConLectorPropioNucleo(pdfActual, numObj => FormatearObjetoSig(numObj, nombreFirmante, razon, momento));
+
+    /// <summary>
+    /// PAdES-LTA (RUNBOOK.md 12.24): un sello de tiempo de ARCHIVO es, en la
+    /// estructura del PDF, el mismo hueco /ByteRange+/Contents con el mismo
+    /// widget/AcroForm que una firma normal — pero con <c>/Type /DocTimeStamp</c>
+    /// y <c>/SubFilter /ETSI.RFC3161</c> en vez de <c>/ETSI.CAdES.detached</c>,
+    /// y su <c>/Contents</c> es directamente el <c>TimeStampToken</c> RFC 3161
+    /// (nunca un CMS de firma con <c>SignerInfo</c> propio — ver
+    /// <see cref="PdfSignatureVerifier"/> para cómo se distingue al verificar).
+    /// Solo tiene sentido sobre un PDF que YA tiene al menos una firma (y,
+    /// en la práctica, ya un <c>/DSS</c>) — por eso siempre usa el lector
+    /// propio, nunca PdfSharpCore.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">El PDF no tiene ninguna revisión incremental previa (no hay nada que sellar todavía).</exception>
+    public static ResultadoPreparacionPades PrepararSelloDeArchivo(byte[] pdfActual, DateTimeOffset momento)
+    {
+        if (!TieneRevisionPrevia(pdfActual))
+            throw new InvalidOperationException("Un sello de tiempo de archivo (PAdES-LTA) requiere que el PDF ya tenga al menos una firma — este no tiene ninguna.");
+
+        return PrepararConLectorPropioNucleo(pdfActual, numObj => FormatearObjetoDocTimeStamp(numObj, momento));
+    }
+
+    private static ResultadoPreparacionPades PrepararConLectorPropioNucleo(byte[] pdfActual, Func<int, string> formatearObjetoPrincipal)
     {
         long longitudOriginal = pdfActual.LongLength;
         long prevStartXref = EncontrarUltimoStartXref(pdfActual);
@@ -314,7 +338,7 @@ public static class PdfSignaturePlaceholder
         int numSig = maxObjNum + 1;
         int numWidget = maxObjNum + 2;
 
-        string textoSigNuevo = FormatearObjetoSig(numSig, nombreFirmante, razon, momento);
+        string textoSigNuevo = formatearObjetoPrincipal(numSig);
         string textoWidgetNuevo = FormatearObjetoWidget(numWidget, numSig, paginaNum, paginaGen);
         string textoPaginaMutado = InsertarEnArray(textoPagina, "/Annots", $"{numWidget} 0 R");
         string textoAcroFormMutado = InsertarEnArray(textoAcroForm, "/Fields", $"{numWidget} 0 R");
@@ -535,6 +559,12 @@ public static class PdfSignaturePlaceholder
     private static string FormatearObjetoSig(int objNum, string nombreFirmante, string razon, DateTimeOffset momento) =>
         $"{objNum} 0 obj\n<<\n/Type /Sig\n/Filter /Adobe.PPKLite\n/SubFilter /ETSI.CAdES.detached\n" +
         $"/Name {FormatearCadenaUnicode(nombreFirmante)}\n/Reason {FormatearCadenaUnicode(razon)}\n" +
+        $"/M {FormatearCadenaUnicode(FormatearFechaPdf(momento))}\n" +
+        $"/ByteRange {MarcadorByteRange}\n/Contents {MarcadorContenido}\n>>\nendobj\n";
+
+    /// <summary>Ver <see cref="PrepararSelloDeArchivo"/> — mismo hueco que <see cref="FormatearObjetoSig"/>, sin /Name ni /Reason (no aplican a un sello de tiempo, no hay "firmante").</summary>
+    private static string FormatearObjetoDocTimeStamp(int objNum, DateTimeOffset momento) =>
+        $"{objNum} 0 obj\n<<\n/Type /DocTimeStamp\n/Filter /Adobe.PPKLite\n/SubFilter /ETSI.RFC3161\n" +
         $"/M {FormatearCadenaUnicode(FormatearFechaPdf(momento))}\n" +
         $"/ByteRange {MarcadorByteRange}\n/Contents {MarcadorContenido}\n>>\nendobj\n";
 

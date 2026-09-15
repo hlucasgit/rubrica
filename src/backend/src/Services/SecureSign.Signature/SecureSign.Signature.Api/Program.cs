@@ -15,6 +15,8 @@ using SecureSign.Signature.Infrastructure.TicketFirmaLocal;
 using SecureSign.Signature.Infrastructure.ValidarPades;
 using SecureSign.Shared.Auth;
 using SecureSign.Trust;
+using SecureSign.Tsa;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,6 +50,16 @@ builder.Services.AddSingleton(_ => ListaConfianzaIofe.CargarDesdeArchivo(
     Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml")));
 builder.Services.AddScoped<ValidadorCertificados>();
 builder.Services.AddScoped<IValidadorConfianzaFirmante, ValidadorConfianzaFirmanteIofe>();
+
+// PAdES-LTA (RUNBOOK.md 12.24): FirmarLocalHandler pide un sello de tiempo
+// RFC 3161 sobre el documento ya con firma+DSS — mismo cliente puro que usa
+// el Firmador Local para PAdES-T (ver RUNBOOK.md 12.14), aquí del lado
+// servidor. Se expone OpcionesTsa como instancia POCO simple (no IOptions<T>)
+// para que SecureSign.Signature.Application no necesite depender de
+// Microsoft.Extensions.Options en su propio .csproj.
+builder.Services.Configure<OpcionesTsa>(builder.Configuration.GetSection(OpcionesTsa.SeccionConfiguracion));
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<OpcionesTsa>>().Value);
+builder.Services.AddHttpClient<ClienteTsaRfc3161>();
 
 // Validador PAdES independiente (ver informe de preauditoría INDECOPI/IOFE,
 // hallazgo P0-05, y RUNBOOK.md 12.12): compone PdfSignatureVerifier +

@@ -22,12 +22,22 @@ public sealed class ValidadorDocumentoPades(ValidadorCertificados validadorCerti
     public async Task<ResultadoValidacionDocumentoPades> ValidarAsync(byte[] pdf, CancellationToken ct = default)
     {
         var verificaciones = PdfSignatureVerifier.VerificarTodas(pdf);
-        var firmas = new List<ResultadoValidacionFirmaPades>(verificaciones.Count);
 
-        foreach (var verificacion in verificaciones)
+        // PAdES-LTA (RUNBOOK.md 12.24): un /DocTimeStamp no es la firma de un
+        // firmante — evaluarlo con ValidarUnaAsync (que consulta la TSL de
+        // IOFE contra el certificado) confundiría el certificado de la TSA
+        // con el de un signatario acreditado. Se separa ANTES de armar el
+        // expediente, no se descarta.
+        var firmasReales = verificaciones.Where(v => !v.EsSelloDeArchivo).ToList();
+        var sellosDeArchivo = verificaciones.Where(v => v.EsSelloDeArchivo)
+            .Select(v => new ResultadoValidacionSelloArchivo(v.Valido, v.InstanteFirmaDeclarado, v.Certificado?.Subject, v.Error))
+            .ToList();
+
+        var firmas = new List<ResultadoValidacionFirmaPades>(firmasReales.Count);
+        foreach (var verificacion in firmasReales)
             firmas.Add(await ValidarUnaAsync(verificacion, ct));
 
-        return new ResultadoValidacionDocumentoPades(verificaciones.Count, firmas);
+        return new ResultadoValidacionDocumentoPades(firmasReales.Count, firmas, sellosDeArchivo);
     }
 
     private async Task<ResultadoValidacionFirmaPades> ValidarUnaAsync(ResultadoVerificacionPades verificacion, CancellationToken ct)

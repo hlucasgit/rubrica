@@ -71,17 +71,35 @@ public sealed record ResultadoValidacionFirmaPades(
 }
 
 /// <summary>
+/// Expediente de UN sello de tiempo de ARCHIVO (PAdES-LTA, RUNBOOK.md
+/// 12.24) — deliberadamente separado de <see cref="ResultadoValidacionFirmaPades"/>:
+/// no es la firma de una persona, es una prueba independiente de que el
+/// documento (con sus firmas y su DSS) ya existía en <see cref="GenTime"/>.
+/// Nunca participa en <see cref="ResultadoValidacionDocumentoPades.DocumentoValido"/>
+/// — es información adicional para auditoría, igual que el sello de tiempo
+/// de PAdES-T (ver <see cref="ResultadoValidacionFirmaPades.InstanteSelloTiempo"/>).
+/// </summary>
+public sealed record ResultadoValidacionSelloArchivo(
+    bool Valido,
+    DateTimeOffset? GenTime,
+    string? AutoridadTsa,
+    string? Error);
+
+/// <summary>
 /// Expediente de validación de TODAS las firmas /Sig de un PDF — ver
 /// SecureSign.Validator.ValidadorDocumentoPades.
 /// </summary>
 public sealed record ResultadoValidacionDocumentoPades(
     int TotalFirmas,
-    IReadOnlyList<ResultadoValidacionFirmaPades> Firmas)
+    IReadOnlyList<ResultadoValidacionFirmaPades> Firmas,
+    IReadOnlyList<ResultadoValidacionSelloArchivo> SellosDeArchivo)
 {
     /// <summary>
     /// El documento es válido solo si tiene al menos una firma y TODAS sus
     /// firmas pasan completas (criptografía + confianza IOFE) — un documento
     /// sin ningún /Sig no está "válido por defecto", está simplemente sin firmar.
+    /// Los sellos de archivo (PAdES-LTA) NO afectan este veredicto — ver
+    /// comentario de <see cref="ResultadoValidacionSelloArchivo"/>.
     /// </summary>
     public bool DocumentoValido => TotalFirmas > 0 && Firmas.All(f => f.EstadoFinal);
 }

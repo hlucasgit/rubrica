@@ -12,7 +12,8 @@ public sealed class ValidadorDocumentoPadesIndependiente(ValidadorDocumentoPades
         return new ResultadoValidarPadesResponse(
             resultado.TotalFirmas,
             resultado.DocumentoValido,
-            resultado.Firmas.Select(Mapear).ToList());
+            resultado.Firmas.Select(Mapear).ToList(),
+            resultado.SellosDeArchivo.Select(s => new SelloArchivoDto(s.Valido, s.GenTime, s.AutoridadTsa, s.Error)).ToList());
     }
 
     private static FirmaValidadaDto Mapear(ResultadoValidacionFirmaPades f)

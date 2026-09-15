@@ -1,7 +1,9 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using Org.BouncyCastle.Cms;
+using Org.BouncyCastle.Tsp;
 
 namespace SecureSign.Pades;
 
@@ -33,6 +35,18 @@ namespace SecureSign.Pades;
 /// (SHA-1 del valor exacto de /Contents, ISO 32000-2 §12.8.4.3, RUNBOOK.md
 /// 12.24) — se reutilizan en vez de volver a parsear el PDF desde cero.
 /// </param>
+/// <param name="EsSelloDeArchivo">
+/// true si esta entrada es un sello de tiempo de ARCHIVO (PAdES-LTA,
+/// <c>/Type /DocTimeStamp</c>, <c>/SubFilter /ETSI.RFC3161</c> — RUNBOOK.md
+/// 12.24), no una firma de un firmante real. Cuando es true: <see cref="Certificado"/>
+/// es el certificado de la TSA (no de un firmante), <see cref="InstanteFirmaDeclarado"/>
+/// es el <c>genTime</c> del propio token (no un /M autodeclarado), y
+/// <see cref="Valido"/> exige tanto que la firma interna del token sea
+/// consistente como que su <c>messageImprint</c> coincida con el contenido
+/// cubierto — nunca se interpreta como una firma de persona (ver
+/// SecureSign.Validator.ValidadorDocumentoPades, que separa estas entradas
+/// de la lista de firmas).
+/// </param>
 public sealed record ResultadoVerificacionPades(
     bool Valido,
     string? NombreFirma,
@@ -40,7 +54,8 @@ public sealed record ResultadoVerificacionPades(
     DateTimeOffset? InstanteFirmaDeclarado,
     byte[]? TokenTsaDer,
     string? Error,
-    byte[]? CmsDer = null);
+    byte[]? CmsDer = null,
+    bool EsSelloDeArchivo = false);
 
 /// <summary>
 /// Verifica, de forma completamente independiente de <see cref="PdfSignaturePlaceholder"/>
@@ -145,6 +160,15 @@ public static class PdfSignatureVerifier
 
             byte[] cms = cmsRecortado;
 
+            // PAdES-LTA (RUNBOOK.md 12.24): un /DocTimeStamp trae en /Contents
+            // un TimeStampToken RFC 3161, no un CMS de firma sobre
+            // contenidoCubierto — tratarlo como si lo fuera daría "message-
+            // digest inválido" siempre (el mensaje que realmente firmó la TSA
+            // es el TSTInfo, no nuestro contenido directamente). Se detecta
+            // ANTES de intentar CmsSignedData, por /SubFilter.
+            if (ExtraerNombrePdf(texto, "/SubFilter", idxContents) == "ETSI.RFC3161")
+                return VerificarSelloDeArchivo(contenidoCubierto, cms);
+
             var datosFirmados = new CmsSignedData(new CmsProcessableByteArray(contenidoCubierto), cms);
             var firmantes = datosFirmados.GetSignerInfos().GetSigners();
             if (firmantes.Count == 0)
@@ -222,6 +246,64 @@ public static class PdfSignatureVerifier
         if (longitudTotal <= 0 || longitudTotal > buffer.Length) return null;
 
         return buffer[..(int)longitudTotal];
+    }
+
+    /// <summary>
+    /// Verifica un sello de tiempo de ARCHIVO (PAdES-LTA, RUNBOOK.md 12.24)
+    /// — distinto de una firma normal en dos aspectos: (1) lo que hay que
+    /// comprobar no es "¿la firma corresponde al certificado?" sino "¿el
+    /// TimeStampToken es internamente consistente Y su messageImprint
+    /// coincide con el contenido cubierto?"; (2) el "certificado" relevante
+    /// es el de la TSA, no el de un firmante.
+    /// </summary>
+    private static ResultadoVerificacionPades VerificarSelloDeArchivo(byte[] contenidoCubierto, byte[] tokenDer)
+    {
+        try
+        {
+            var token = new TimeStampToken(new CmsSignedData(tokenDer));
+            var certificadoTsaBc = token.GetCertificates().EnumerateMatches(token.SignerID).FirstOrDefault();
+            if (certificadoTsaBc is null)
+                return new ResultadoVerificacionPades(false, null, null, null, tokenDer,
+                    "El sello de tiempo de archivo no incluye el certificado de la TSA que lo firmó.", tokenDer, EsSelloDeArchivo: true);
+
+            bool firmaTokenValida;
+            try { token.Validate(certificadoTsaBc); firmaTokenValida = true; }
+            catch (TspValidationException) { firmaTokenValida = false; }
+
+            byte[] digestEsperado = SHA256.HashData(contenidoCubierto);
+            bool imprintCoincide = token.TimeStampInfo.GetMessageImprintDigest().AsSpan().SequenceEqual(digestEsperado);
+
+            var certificadoTsaNet = new X509Certificate2(certificadoTsaBc.GetEncoded());
+            bool valido = firmaTokenValida && imprintCoincide;
+            string? error = valido ? null
+                : !firmaTokenValida ? "La firma interna del sello de tiempo de archivo no es válida — el token pudo alterarse después de emitirse."
+                : "El sello de tiempo de archivo no corresponde al contenido actual del documento (messageImprint no coincide) — el archivo pudo alterarse después de sellarse.";
+
+            return new ResultadoVerificacionPades(
+                valido, null, certificadoTsaNet, token.TimeStampInfo.GenTime, tokenDer, error, tokenDer, EsSelloDeArchivo: true);
+        }
+        catch (Exception ex)
+        {
+            return new ResultadoVerificacionPades(false, null, null, null, null,
+                $"No se pudo procesar el sello de tiempo de archivo: {ex.Message}", null, EsSelloDeArchivo: true);
+        }
+    }
+
+    /// <summary>Extrae el valor de una clave cuyo valor es un Name PDF (p. ej. <c>/SubFilter /ETSI.RFC3161</c>) — sin la barra inicial del valor.</summary>
+    private static string? ExtraerNombrePdf(string texto, string clave, int limiteSuperior)
+    {
+        int cuentaAtras = Math.Min(limiteSuperior, 4000);
+        int idxClave = texto.LastIndexOf(clave, limiteSuperior, cuentaAtras, StringComparison.Ordinal);
+        if (idxClave < 0) return null;
+
+        int p = idxClave + clave.Length;
+        while (p < texto.Length && char.IsWhiteSpace(texto[p])) p++;
+        if (p >= texto.Length || texto[p] != '/') return null;
+
+        p++; // consumir la barra inicial del Name.
+        int inicio = p;
+        while (p < texto.Length && !char.IsWhiteSpace(texto[p]) && texto[p] != '/' && texto[p] != '>') p++;
+        return texto.Substring(inicio, p - inicio);
     }
 
     private static string? ExtraerCadenaPdf(string texto, string clave, int limiteSuperior)
