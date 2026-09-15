@@ -15,6 +15,7 @@ Plataforma integral de firma electrónica y firma digital avanzada, diseñada co
 | [`docs/05-integracion`](docs/05-integracion) | Manual de integración, catálogo de API REST, webhooks, manejo de errores |
 | [`docs/06-white-label`](docs/06-white-label) | Arquitectura de firma embebida multi-institucional (White Label) |
 | [`docs/07-seguridad`](docs/07-seguridad) | Modelo de seguridad Zero Trust, cifrado, gestión de llaves, auditoría |
+| [`docs/08-cumplimiento`](docs/08-cumplimiento) | **Estado real** (no aspiracional) frente a la preauditoría INDECOPI/IOFE: matriz de cumplimiento por hallazgo, política de versiones/gestión de cambios, y manuales de usuario/administrador del Firmador Local |
 | [`src/backend`](src/backend) | Solución .NET 8 — Clean Architecture, microservicios core, **operativos con PostgreSQL real** (ver `RUNBOOK.md`) |
 | [`src/backend/database`](src/backend/database) | Scripts SQL de referencia (esquema, índices, procedimientos almacenados con hash-chain en plpgsql) — la implementación real usa EF Core Code-First, ver `src/backend/README.md` |
 | [`sdk/`](sdk) | Esqueletos de SDK (.NET, JavaScript, Python) |
@@ -27,6 +28,7 @@ Plataforma integral de firma electrónica y firma digital avanzada, diseñada co
 4. `docs/06-white-label/arquitectura-white-label.md`
 5. `docs/05-integracion/manual-integracion-api.md`
 6. `src/backend/README.md` (código)
+7. `docs/08-cumplimiento/matriz-cumplimiento-indecopi.md` (qué falta realmente para acreditar)
 
 ## Nombre e identidad
 
