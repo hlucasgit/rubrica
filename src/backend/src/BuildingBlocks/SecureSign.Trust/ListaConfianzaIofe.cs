@@ -10,15 +10,16 @@ namespace SecureSign.Trust;
 /// ("bajo supervisión") junto con sus certificados — es la fuente oficial
 /// para responder "¿esta cadena de certificación pertenece a la IOFE?".
 ///
-/// LIMITACIÓN CONOCIDA (documentada, no oculta): esta clase NO verifica la
-/// firma XAdES de la propia TSL. ETSI TS 119 612 recomienda validar esa
-/// firma contra un "pointer"/ancla de confianza publicado por separado por
-/// la Comisión Europea (o, en este caso, contra el certificado del propio
-/// operador del esquema de INDECOPI) antes de confiar en el contenido. Se
-/// mitiga parcialmente descargando el archivo solo por HTTPS desde el
-/// dominio oficial y cacheándolo, pero la verificación criptográfica de la
-/// firma de la TSL queda como trabajo pendiente (ver informe de
-/// preauditoría INDECOPI/IOFE, sección 11).
+/// La firma XAdES de la propia TSL se verifica en <see cref="CargarDesdeArchivoFirmado"/>
+/// (ver RUNBOOK.md 12.22) — el ancla de confianza es la raíz real de
+/// INDECOPI ("INDECOPI AAC RAIZ"), obtenida de la URL AIA oficial embebida
+/// en el propio certificado firmante de la TSL
+/// (https://recursos.indecopi.gob.pe/iofe/crt/ca_root_indecopi.crt),
+/// deliberadamente SEPARADA de las raíces DNIe de <c>AlmacenRaicesConfiables</c>
+/// — son jerarquías PKI distintas (quién puede firmar la TSL no tiene nada
+/// que ver con quién puede emitir un DNIe) y mezclarlas ampliaría sin
+/// querer el conjunto de raíces confiables para validar certificados de
+/// firmante.
 /// </summary>
 public sealed class ListaConfianzaIofe
 {
@@ -30,15 +31,40 @@ public sealed class ListaConfianzaIofe
     public IReadOnlyList<ServicioAcreditadoIofe> ServiciosAcreditados { get; }
     public DateTimeOffset CargadaEn { get; }
 
-    private ListaConfianzaIofe(IReadOnlyList<ServicioAcreditadoIofe> servicios, DateTimeOffset cargadaEn)
+    /// <summary>true solo si esta instancia se cargó vía <see cref="CargarDesdeArchivoFirmado"/> y su firma XAdES verificó contra un ancla de confianza real.</summary>
+    public bool FirmaVerificada { get; }
+
+    private ListaConfianzaIofe(IReadOnlyList<ServicioAcreditadoIofe> servicios, DateTimeOffset cargadaEn, bool firmaVerificada)
     {
         ServiciosAcreditados = servicios;
         CargadaEn = cargadaEn;
+        FirmaVerificada = firmaVerificada;
     }
 
-    public static ListaConfianzaIofe CargarDesdeArchivo(string rutaXml)
+    /// <summary>
+    /// Carga la TSL SIN verificar su firma XAdES — uso: pruebas con
+    /// fixtures sintéticos sin firmar (ver TslDePruebaHelper). El código de
+    /// producción real debe usar <see cref="CargarDesdeArchivoFirmado"/>.
+    /// </summary>
+    public static ListaConfianzaIofe CargarDesdeArchivo(string rutaXml) =>
+        new(ParsearServicios(XDocument.Load(rutaXml)), DateTimeOffset.UtcNow, firmaVerificada: false);
+
+    /// <summary>
+    /// Carga la TSL Y verifica su firma XAdES-BES (envolvente, XML-DSig
+    /// estándar) contra <paramref name="raizConfiableFirmaTsl"/> antes de
+    /// confiar en una sola línea del contenido — fail closed: si la firma
+    /// no verifica, lanza en vez de devolver una lista parcial o sin marcar.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">La TSL no trae firma XAdES, o su firma no verifica contra el ancla de confianza dada.</exception>
+    public static ListaConfianzaIofe CargarDesdeArchivoFirmado(string rutaXml, System.Security.Cryptography.X509Certificates.X509Certificate2 raizConfiableFirmaTsl)
     {
+        VerificadorFirmaTsl.VerificarOLanzar(rutaXml, raizConfiableFirmaTsl);
         var doc = XDocument.Load(rutaXml);
+        return new ListaConfianzaIofe(ParsearServicios(doc), DateTimeOffset.UtcNow, firmaVerificada: true);
+    }
+
+    private static List<ServicioAcreditadoIofe> ParsearServicios(XDocument doc)
+    {
         var servicios = new List<ServicioAcreditadoIofe>();
 
         foreach (var servicioXml in doc.Descendants(NsTsl + "TSPService"))
@@ -69,7 +95,7 @@ public sealed class ListaConfianzaIofe
             }
         }
 
-        return new ListaConfianzaIofe(servicios, DateTimeOffset.UtcNow);
+        return servicios;
     }
 
     /// <summary>¿Algún certificado de la cadena de confianza (de la hoja hacia arriba) es exactamente uno que la TSL lista como acreditado y bajo supervisión?</summary>

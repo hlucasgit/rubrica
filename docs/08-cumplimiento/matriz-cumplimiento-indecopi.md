@@ -42,7 +42,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Validación CRL | 🔴 | 🟢 (con verificación de firma) | RUNBOOK 12.9/12.17 |
 | Validación OCSP | 🔴 | 🟢 (con verificación de firma) | RUNBOOK 12.9/12.17 |
 | Cadena de certificación | 🔴 | 🟢 | `ValidadorCertificados` (X509Chain, CustomRootTrust) |
-| Confianza IOFE / TSL | 🔴 | 🟢 | `ListaConfianzaIofe` contra TSL real de INDECOPI |
+| Confianza IOFE / TSL | 🔴 | 🟢 (contenido); 🟡 (firma de la TSL) | `ListaConfianzaIofe` contra TSL real de INDECOPI. Verificación de la firma XAdES de la TSL lista y probada (RUNBOOK 12.22) pero no activada — la TSL real de INDECOPI no verifica contra su propio certificado embebido, hallazgo del dato oficial |
 | Propósito/KeyUsage/EKU/política | 🟡 | 🟡 sin cambios | Ver fila P1 arriba — EKU/CertificatePolicies siguen sin verificarse |
 | TSA RFC 3161 | 🔴 (solo interfaz) | 🟢 | `SecureSign.Tsa` |
 | PAdES-T/LT/LTA | 🔴 | 🟡 (solo T) | PAdES-T real; LT/LTA no iniciado (necesita almacén de revocación embebido en el PDF) |
@@ -105,4 +105,4 @@ El informe exige una batería automatizada contra PKCS#11 (certificado revocado,
 2. ~~Redactar manual de usuario y manual de administrador~~ — hecho (`manual-usuario-firmador-local.md`, `manual-administrador.md`).
 3. Adquirir un certificado de firma de código (procura, no ingeniería) para cerrar P0-06 por completo.
 4. ~~Migrar JWT HS256 → RS256, Gateway como único firmante~~ — hecho (RUNBOOK 12.21). Queda un IdP externo real (Keycloak/Duende) con Authorization Code/PKCE, deliberadamente diferido.
-5. Verificar la firma XAdES de la propia TSL de INDECOPI en `ListaConfianzaIofe` (limitación conocida desde RUNBOOK 12.10).
+5. ~~Verificar la firma XAdES de la propia TSL de INDECOPI en `ListaConfianzaIofe`~~ — código hecho, probado y verificado como correcto (RUNBOOK 12.22), pero **no activado en producción**: la TSL real publicada por INDECOPI hoy no verifica contra su propio certificado embebido (hallazgo del dato oficial, confirmado con tres métodos independientes — no un bug propio). Queda pendiente reportar el hallazgo a INDECOPI y/o esperar su corrección antes de activar `CargarDesdeArchivoFirmado` como bloqueante.

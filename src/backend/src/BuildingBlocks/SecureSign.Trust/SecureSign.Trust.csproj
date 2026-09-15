@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <!-- Verificación de la firma XAdES/XML-DSig de la TSL de INDECOPI (ver VerificadorFirmaTsl.cs, RUNBOOK 12.22) — no viene en el framework compartido de .NET 8. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.4" />
   </ItemGroup>
 
 </Project>
