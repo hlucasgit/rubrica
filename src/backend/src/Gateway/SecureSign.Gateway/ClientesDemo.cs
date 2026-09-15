@@ -11,7 +11,17 @@ namespace SecureSign.Gateway;
 public sealed class ClienteDemo
 {
     public string ClientId { get; set; } = default!;
-    public string ClientSecret { get; set; } = default!;
+
+    /// <summary>
+    /// Hash(es) Argon2id del secreto (ver Argon2idSecretHasher), NUNCA el
+    /// secreto en texto plano — RUNBOOK.md 12.23. Una lista, no un solo
+    /// valor: permite rotar sin downtime (agregar el hash del secreto
+    /// nuevo, dejar el viejo activo durante la ventana de gracia, y
+    /// después quitarlo) sin necesitar ningún cambio de código ni de
+    /// esquema para soportarlo.
+    /// </summary>
+    public List<string> SecretosHash { get; set; } = [];
+
     public Guid TenantId { get; set; }
     public Guid ClienteIntegradorId { get; set; }
     public string Scopes { get; set; } = default!;

@@ -30,7 +30,7 @@ public sealed class AuthController(JwtTokenService tokenService, IOptions<Client
             return BadRequest(new { error = "UNSUPPORTED_GRANT_TYPE", mensaje = "Solo se admite client_credentials." });
 
         var cliente = clientesDemo.Value.Clientes.FirstOrDefault(c => c.ClientId == client_id);
-        if (cliente is null || !CryptographicEquals(cliente.ClientSecret, client_secret))
+        if (cliente is null || !cliente.SecretosHash.Any(hash => Argon2idSecretHasher.Verificar(client_secret, hash)))
             return Unauthorized(new { error = "INVALID_CLIENT", mensaje = "client_id o client_secret inválidos." });
 
         var scopesSolicitados = (scope ?? cliente.Scopes).Split(' ', StringSplitOptions.RemoveEmptyEntries);

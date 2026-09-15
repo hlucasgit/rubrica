@@ -53,7 +53,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Firma digital del ejecutable | 🔴 | 🔴 sin cambios | Bloqueado por procura (P0-06) |
 | Distribución/instalador firmado | 🔴 | 🔴 sin cambios | Idem |
 | JWT de producción | 🔴 | 🟡 | RS256 real, llave privada solo en el Gateway (RUNBOOK 12.21) — sigue sin ser un IdP acreditado (sin Authorization Code/PKCE, sin Keycloak/Duende externo) |
-| Secretos productivos | 🔴 | 🟡 | La llave de firma JWT ya está externalizada (`RsaKeyStore`, fuera de `appsettings.json`, RUNBOOK 12.21). `client_secret` de integradores demo y `Jwt:SecretoClienteInterno` siguen en `appsettings.json` en texto plano — pendiente |
+| Secretos productivos | 🔴 | 🟡 | La llave de firma JWT ya está externalizada (`RsaKeyStore`, fuera de `appsettings.json`, RUNBOOK 12.21). `client_secret` de integradores demo ahora se guarda como hash Argon2id, nunca en texto plano (RUNBOOK 12.23). Sigue pendiente: rotación real de secretos (mecanismo listo, sin procedimiento) y `Jwt:SecretoClienteInterno`, que sigue en texto plano en `appsettings.json` |
 | Pruebas PKCS#11 automatizadas | 🔴 | 🔴 sin cambios | Necesita SoftHSM2 compilado desde fuente (no publica binario Windows); bloqueado por falta de toolchain (Visual Studio + CMake + vcpkg) en el entorno, pospuesto por decisión explícita (ver sección 5) |
 | Pruebas PAdES automatizadas | 🔴 | 🟢 | RUNBOOK 12.15 — batería que encontró y corrigió el bug real de truncamiento CMS |
 | Pruebas revocación/IOFE | 🔴 | 🟢 | RUNBOOK 12.17 — 15 pruebas, incluidas las que prueban el ataque (CRL/OCSP forjados) |
@@ -106,3 +106,4 @@ El informe exige una batería automatizada contra PKCS#11 (certificado revocado,
 3. Adquirir un certificado de firma de código (procura, no ingeniería) para cerrar P0-06 por completo.
 4. ~~Migrar JWT HS256 → RS256, Gateway como único firmante~~ — hecho (RUNBOOK 12.21). Queda un IdP externo real (Keycloak/Duende) con Authorization Code/PKCE, deliberadamente diferido.
 5. ~~Verificar la firma XAdES de la propia TSL de INDECOPI en `ListaConfianzaIofe`~~ — código hecho, probado y verificado como correcto (RUNBOOK 12.22), pero **no activado en producción**: la TSL real publicada por INDECOPI hoy no verifica contra su propio certificado embebido (hallazgo del dato oficial, confirmado con tres métodos independientes — no un bug propio). Queda pendiente reportar el hallazgo a INDECOPI y/o esperar su corrección antes de activar `CargarDesdeArchivoFirmado` como bloqueante.
+6. ~~Hash Argon2id del `client_secret` de integradores demo~~ — hecho (RUNBOOK 12.23), verificado en vivo contra el Gateway real. Queda un procedimiento de rotación (el mecanismo, `SecretosHash` como lista, ya lo soporta) y `Jwt:SecretoClienteInterno` todavía en texto plano.
