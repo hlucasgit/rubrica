@@ -19,12 +19,22 @@ namespace SecureSign.Trust;
 /// </summary>
 public sealed class VerificadorRevocacionOcsp(HttpClient http)
 {
-    public async Task<(EstadoRevocacion Estado, string Detalle)> VerificarAsync(
+    /// <param name="OcspRespuestaDer">
+    /// Los bytes DER exactos de la respuesta OCSP completa (el <c>OCSPResponse</c>
+    /// ya firmado, no solo el status) — solo no-null cuando la respuesta se
+    /// obtuvo Y su firma se verificó como confiable (<see cref="FirmaEsConfiable"/>).
+    /// Igual que <see cref="VerificadorRevocacionCrl"/>, existe para
+    /// PAdES-LT (RUNBOOK.md 12.24) — en la práctica, RENIEC exige acceso
+    /// regulado por TUPA para OCSP, así que hoy esto casi siempre es null
+    /// (ver comentario de clase); el campo queda listo para cuando exista
+    /// ese acceso.
+    /// </param>
+    public async Task<(EstadoRevocacion Estado, string Detalle, byte[]? OcspRespuestaDer)> VerificarAsync(
         X509Certificate2 certificado, X509Certificate2 emisor, CancellationToken ct = default)
     {
         string? url = ExtensionesX509.ObtenerUrlOcsp(certificado);
         if (url is null)
-            return (EstadoRevocacion.Unavailable, "El certificado no declara ningún responder OCSP (AIA, método 1.3.6.1.5.5.7.48.1).");
+            return (EstadoRevocacion.Unavailable, "El certificado no declara ningún responder OCSP (AIA, método 1.3.6.1.5.5.7.48.1).", null);
 
         try
         {
@@ -45,35 +55,35 @@ public sealed class VerificadorRevocacionOcsp(HttpClient http)
 
             using var respuesta = await http.PostAsync(url, contenido, ct);
             if (!respuesta.IsSuccessStatusCode)
-                return (EstadoRevocacion.Unavailable, $"El responder OCSP {url} devolvió HTTP {(int)respuesta.StatusCode}.");
+                return (EstadoRevocacion.Unavailable, $"El responder OCSP {url} devolvió HTTP {(int)respuesta.StatusCode}.", null);
 
             byte[] cuerpoRespuesta = await respuesta.Content.ReadAsByteArrayAsync(ct);
             var ocspResp = new OcspResp(cuerpoRespuesta);
             if (ocspResp.Status != OcspRespStatus.Successful)
-                return (EstadoRevocacion.Unavailable, $"El responder OCSP {url} devolvió estado {ocspResp.Status}, no Successful.");
+                return (EstadoRevocacion.Unavailable, $"El responder OCSP {url} devolvió estado {ocspResp.Status}, no Successful.", null);
 
             var basica = (BasicOcspResp)ocspResp.GetResponseObject();
             var individual = basica.Responses.FirstOrDefault(r => r.GetCertID().Equals(certId));
             if (individual is null)
-                return (EstadoRevocacion.Unavailable, $"El responder OCSP {url} no incluyó una respuesta para este certificado.");
+                return (EstadoRevocacion.Unavailable, $"El responder OCSP {url} no incluyó una respuesta para este certificado.", null);
 
             // RFC 6960 §3.2: nunca confiar en el contenido de una respuesta
             // OCSP sin verificar su firma primero — de lo contrario cualquiera
             // que responda en esa URL (MITM, servidor comprometido) podría
             // forjar un "no revocado". Esto NO se estaba haciendo antes.
             if (!FirmaEsConfiable(basica, emisorBc))
-                return (EstadoRevocacion.Unavailable, $"La respuesta OCSP de {url} no está firmada por el emisor ni por un firmante OCSP delegado válido — se descarta sin confiar en su contenido.");
+                return (EstadoRevocacion.Unavailable, $"La respuesta OCSP de {url} no está firmada por el emisor ni por un firmante OCSP delegado válido — se descarta sin confiar en su contenido.", null);
 
             return individual.GetCertStatus() switch
             {
-                null => (EstadoRevocacion.Good, $"OCSP {url}: certificado no revocado."),
-                RevokedStatus revocado => (EstadoRevocacion.Revoked, $"OCSP {url}: revocado el {revocado.RevocationTime:o}."),
-                _ => (EstadoRevocacion.Unknown, $"OCSP {url}: el responder no tiene información sobre este certificado (unknown).")
+                null => (EstadoRevocacion.Good, $"OCSP {url}: certificado no revocado.", cuerpoRespuesta),
+                RevokedStatus revocado => (EstadoRevocacion.Revoked, $"OCSP {url}: revocado el {revocado.RevocationTime:o}.", cuerpoRespuesta),
+                _ => (EstadoRevocacion.Unknown, $"OCSP {url}: el responder no tiene información sobre este certificado (unknown).", null)
             };
         }
         catch (Exception ex)
         {
-            return (EstadoRevocacion.Unavailable, $"No se pudo completar la consulta OCSP a {url}: {ex.Message}");
+            return (EstadoRevocacion.Unavailable, $"No se pudo completar la consulta OCSP a {url}: {ex.Message}", null);
         }
     }
 

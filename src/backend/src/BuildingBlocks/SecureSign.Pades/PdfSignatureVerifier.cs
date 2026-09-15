@@ -25,13 +25,22 @@ namespace SecureSign.Pades;
 /// tiempo). Que exista NO implica por sí solo que sea confiable — eso lo
 /// decide SecureSign.Tsa.VerificadorTokenTsa.
 /// </param>
+/// <param name="CmsDer">
+/// Los bytes DER exactos del CMS embebido en /Contents — los mismos que ya
+/// se recortaron por longitud DER real (ver <see cref="RecortarPorLongitudDer"/>)
+/// para poder parsearlo, nunca el hueco completo relleno de ceros. Los
+/// necesita <c>PdfDssWriter</c> para calcular la clave VRI de PAdES-LT
+/// (SHA-1 del valor exacto de /Contents, ISO 32000-2 §12.8.4.3, RUNBOOK.md
+/// 12.24) — se reutilizan en vez de volver a parsear el PDF desde cero.
+/// </param>
 public sealed record ResultadoVerificacionPades(
     bool Valido,
     string? NombreFirma,
     X509Certificate2? Certificado,
     DateTimeOffset? InstanteFirmaDeclarado,
     byte[]? TokenTsaDer,
-    string? Error);
+    string? Error,
+    byte[]? CmsDer = null);
 
 /// <summary>
 /// Verifica, de forma completamente independiente de <see cref="PdfSignaturePlaceholder"/>
@@ -160,8 +169,8 @@ public static class PdfSignatureVerifier
             byte[]? tokenTsa = CmsBuilder.ExtraerSelloTiempo(cms);
 
             return valido
-                ? new ResultadoVerificacionPades(true, nombreFirma, certificadoNet, instanteFirma, tokenTsa, null)
-                : new ResultadoVerificacionPades(false, nombreFirma, certificadoNet, instanteFirma, tokenTsa, "El CMS no verifica contra su propio certificado (message-digest o firma inválida).");
+                ? new ResultadoVerificacionPades(true, nombreFirma, certificadoNet, instanteFirma, tokenTsa, null, cms)
+                : new ResultadoVerificacionPades(false, nombreFirma, certificadoNet, instanteFirma, tokenTsa, "El CMS no verifica contra su propio certificado (message-digest o firma inválida).", cms);
         }
         catch (Exception ex)
         {

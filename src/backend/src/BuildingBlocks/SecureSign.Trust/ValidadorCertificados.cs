@@ -60,14 +60,23 @@ public sealed class ValidadorCertificados(
         // la cadena se cerró usando ExtraStore/CustomTrustStore en vez de la descarga).
         X509Certificate2? emisorDirecto = chain.ChainElements.Count > 1 ? chain.ChainElements[1].Certificate : null;
 
-        var (estadoOcsp, detalleOcsp) = emisorDirecto is not null
+        var (estadoOcsp, detalleOcsp, ocspDer) = emisorDirecto is not null
             ? await verificadorOcsp.VerificarAsync(certificado, emisorDirecto, ct)
-            : (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para consultar OCSP.");
-        var (estadoCrl, detalleCrl) = await verificadorCrl.VerificarAsync(certificado, emisorDirecto, ct);
+            : (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para consultar OCSP.", null);
+        var (estadoCrl, detalleCrl, crlDer) = await verificadorCrl.VerificarAsync(certificado, emisorDirecto, ct);
         evidencia.Add($"OCSP: {estadoOcsp} — {detalleOcsp}");
         evidencia.Add($"CRL: {estadoCrl} — {detalleCrl}");
 
         var revocacion = new ResultadoRevocacion(estadoOcsp, estadoCrl, evidencia);
+
+        // Material para PAdES-LT (RUNBOOK.md 12.24) — la cadena completa que
+        // ya se construyó arriba para decidir CadenaValida/RaizConfiableIofe,
+        // más la CRL/OCSP que ya se descargó y verificó para decidir
+        // Revocacion. Nunca se vuelve a pedir nada por separado.
+        var materialLargoPlazo = new MaterialValidacionLargoPlazo(
+            CadenaCertificadosDer: certificadosDeLaCadena.ToList(),
+            CrlDer: crlDer,
+            OcspRespuestaDer: ocspDer);
 
         return new ResultadoValidacionCertificado(
             CertificadoVigente: vigente,
@@ -77,7 +86,8 @@ public sealed class ValidadorCertificados(
             Revocacion: revocacion,
             InstanteValidacion: instante,
             Evidencia: evidencia,
-            Error: null);
+            Error: null,
+            MaterialLargoPlazo: materialLargoPlazo);
     }
 
     /// <summary>

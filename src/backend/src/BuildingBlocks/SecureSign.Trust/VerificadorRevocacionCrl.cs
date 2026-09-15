@@ -15,18 +15,27 @@ namespace SecureSign.Trust;
 /// </summary>
 public sealed class VerificadorRevocacionCrl(HttpClient http)
 {
-    private sealed record CrlCacheada(HashSet<string> SerialesRevocados, DateTimeOffset ValidaHasta, string IssuerDn);
+    private sealed record CrlCacheada(HashSet<string> SerialesRevocados, DateTimeOffset ValidaHasta, string IssuerDn, byte[] CrlDer);
 
     private readonly ConcurrentDictionary<string, Task<CrlCacheada?>> _cache = new();
 
-    public async Task<(EstadoRevocacion Estado, string Detalle)> VerificarAsync(X509Certificate2 certificado, X509Certificate2? emisor, CancellationToken ct = default)
+    /// <param name="CrlDer">
+    /// Los bytes DER exactos de la CRL usada para esta comprobación — solo
+    /// no-null cuando <paramref name="Estado"/> es <c>Good</c> o <c>Revoked</c>
+    /// (se obtuvo y verificó una CRL de verdad). Existe para que
+    /// <c>PdfDssWriter</c> pueda embeber esta misma CRL como material de
+    /// validación a largo plazo (PAdES-LT, RUNBOOK.md 12.24) — sin esto,
+    /// el "no revocado" quedaría demostrado hoy pero sería imposible de
+    /// volver a probar una vez que la CRL original ya no esté disponible.
+    /// </param>
+    public async Task<(EstadoRevocacion Estado, string Detalle, byte[]? CrlDer)> VerificarAsync(X509Certificate2 certificado, X509Certificate2? emisor, CancellationToken ct = default)
     {
         var urls = ExtensionesX509.ObtenerUrlsCrl(certificado);
         if (urls.Count == 0)
-            return (EstadoRevocacion.Unavailable, "El certificado no declara ningún punto de distribución de CRL (2.5.29.31).");
+            return (EstadoRevocacion.Unavailable, "El certificado no declara ningún punto de distribución de CRL (2.5.29.31).", null);
 
         if (emisor is null)
-            return (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para verificar la firma de la CRL.");
+            return (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para verificar la firma de la CRL.", null);
 
         foreach (var url in urls)
         {
@@ -34,15 +43,15 @@ public sealed class VerificadorRevocacionCrl(HttpClient http)
             if (crl is null) continue; // probar el siguiente mirror
 
             if (DateTimeOffset.UtcNow > crl.ValidaHasta)
-                return (EstadoRevocacion.Unavailable, $"La CRL de {url} está vencida (NextUpdate {crl.ValidaHasta:o}) — RENIEC publica una nueva cada 24h.");
+                return (EstadoRevocacion.Unavailable, $"La CRL de {url} está vencida (NextUpdate {crl.ValidaHasta:o}) — RENIEC publica una nueva cada 24h.", null);
 
             string serial = NormalizarSerial(certificado.SerialNumber);
             return crl.SerialesRevocados.Contains(serial)
-                ? (EstadoRevocacion.Revoked, $"El número de serie {serial} figura en la CRL de {crl.IssuerDn} ({url}).")
-                : (EstadoRevocacion.Good, $"No revocado según la CRL de {crl.IssuerDn} ({url}), vigente hasta {crl.ValidaHasta:o}.");
+                ? (EstadoRevocacion.Revoked, $"El número de serie {serial} figura en la CRL de {crl.IssuerDn} ({url}).", crl.CrlDer)
+                : (EstadoRevocacion.Good, $"No revocado según la CRL de {crl.IssuerDn} ({url}), vigente hasta {crl.ValidaHasta:o}.", crl.CrlDer);
         }
 
-        return (EstadoRevocacion.Unavailable, $"No se pudo descargar ninguna CRL de los {urls.Count} punto(s) de distribución declarados.");
+        return (EstadoRevocacion.Unavailable, $"No se pudo descargar ninguna CRL de los {urls.Count} punto(s) de distribución declarados.", null);
     }
 
     private Task<CrlCacheada?> ObtenerOCachearAsync(string url, X509Certificate2 emisor, CancellationToken ct) =>
@@ -97,7 +106,7 @@ public sealed class VerificadorRevocacionCrl(HttpClient http)
                 ? new DateTimeOffset(fecha, TimeSpan.Zero)
                 : DateTimeOffset.UtcNow.AddHours(1); // sin NextUpdate declarado: no cachear por mucho tiempo.
 
-            return new CrlCacheada(seriales, validaHasta, crl.IssuerDN.ToString());
+            return new CrlCacheada(seriales, validaHasta, crl.IssuerDN.ToString(), bytes);
         }
         catch
         {

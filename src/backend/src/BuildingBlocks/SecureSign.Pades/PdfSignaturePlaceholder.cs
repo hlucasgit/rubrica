@@ -356,10 +356,11 @@ public static class PdfSignaturePlaceholder
 
     // ---------- Lector de texto PDF mínimo (solo lo que hace falta) ----------
 
-    private sealed record EntradaXref(long Offset, int Gen);
+    /// <summary>internal (no private): reutilizado por <c>PdfDssWriter</c> (RUNBOOK.md 12.24) — misma cadena /Prev, mismo mapa de offsets.</summary>
+    internal sealed record EntradaXref(long Offset, int Gen);
 
     /// <summary>Recorre toda la cadena /Prev (sin límite de profundidad) y arma el mapa "número de objeto -> posición".</summary>
-    private static Dictionary<int, EntradaXref> CaminarCadenaXref(string texto, long xrefInicial, out int rootObjNum, out int rootGen)
+    internal static Dictionary<int, EntradaXref> CaminarCadenaXref(string texto, long xrefInicial, out int rootObjNum, out int rootGen)
     {
         var mapa = new Dictionary<int, EntradaXref>();
         var visitados = new HashSet<long>();
@@ -424,7 +425,7 @@ public static class PdfSignaturePlaceholder
         return mapa;
     }
 
-    private static string ObtenerTextoObjeto(string texto, long offset)
+    internal static string ObtenerTextoObjeto(string texto, long offset)
     {
         int p = (int)offset;
         int fin = texto.IndexOf("endobj", p, StringComparison.Ordinal);
@@ -433,7 +434,7 @@ public static class PdfSignaturePlaceholder
         return texto.Substring(p, fin + "endobj".Length - p);
     }
 
-    private static (int Num, int Gen)? BuscarReferencia(string textoDict, string clave)
+    internal static (int Num, int Gen)? BuscarReferencia(string textoDict, string clave)
     {
         int idx = textoDict.IndexOf(clave, StringComparison.Ordinal);
         if (idx < 0) return null;
@@ -460,7 +461,7 @@ public static class PdfSignaturePlaceholder
         return textoDict.Substring(inicio, p - inicio);
     }
 
-    private static List<(int Num, int Gen)> BuscarArrayDeReferencias(string textoDict, string clave)
+    internal static List<(int Num, int Gen)> BuscarArrayDeReferencias(string textoDict, string clave)
     {
         var resultado = new List<(int, int)>();
         int idx = textoDict.IndexOf(clave, StringComparison.Ordinal);
@@ -576,7 +577,7 @@ public static class PdfSignaturePlaceholder
         return (posContenidoRel, posByteRangeRel);
     }
 
-    private static byte[] ConstruirXrefYTrailer(
+    internal static byte[] ConstruirXrefYTrailer(
         IReadOnlyList<(int ObjNum, int Gen, long Offset)> entradas, int maxObjNum, (int ObjNum, int Gen) root, long prevStartXref, long offsetXref)
     {
         var xref = new StringBuilder();
@@ -645,7 +646,7 @@ public static class PdfSignaturePlaceholder
         return resultado;
     }
 
-    private static string FormatearFechaPdf(DateTimeOffset momento)
+    internal static string FormatearFechaPdf(DateTimeOffset momento)
     {
         // Formato de fecha PDF: D:YYYYMMDDHHmmSSOHH'mm' — ver ISO 32000-1 §7.9.4.
         string signo = momento.Offset < TimeSpan.Zero ? "-" : "+";
@@ -659,7 +660,7 @@ public static class PdfSignaturePlaceholder
     /// flujos de referencias cruzadas de PDF 1.5+), que es donde esta nueva
     /// revisión debe enlazar su propio <c>/Prev</c>.
     /// </summary>
-    private static long EncontrarUltimoStartXref(byte[] pdf)
+    internal static long EncontrarUltimoStartXref(byte[] pdf)
     {
         byte[] marcador = Encoding.ASCII.GetBytes("startxref");
         int pos = -1;

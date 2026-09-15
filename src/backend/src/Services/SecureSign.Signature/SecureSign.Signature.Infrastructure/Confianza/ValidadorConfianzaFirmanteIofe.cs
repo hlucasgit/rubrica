@@ -11,6 +11,10 @@ public sealed class ValidadorConfianzaFirmanteIofe(ValidadorCertificados validad
     {
         using var certificado = new X509Certificate2(certificadoDer);
         var resultado = await validador.ValidarAsync(certificado, instante, ct);
-        return new ResultadoConfianzaFirmante(resultado.EstadoFinal, resultado.Evidencia);
+        var material = new SecureSign.Signature.Application.Confianza.MaterialValidacionLargoPlazo(
+            resultado.MaterialLargoPlazo.CadenaCertificadosDer,
+            resultado.MaterialLargoPlazo.CrlDer,
+            resultado.MaterialLargoPlazo.OcspRespuestaDer);
+        return new ResultadoConfianzaFirmante(resultado.EstadoFinal, resultado.Evidencia, material);
     }
 }

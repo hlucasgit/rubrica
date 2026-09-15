@@ -162,6 +162,24 @@ public sealed class FirmarLocalHandler(
             if (verificacionPades.Certificado is null || !CertificadoCoincide(verificacionPades.Certificado, certificado))
                 return Result.Fallido<FirmarDocumentoResponse>(
                     "El certificado incrustado en el PAdES no coincide con el certificado de la firma desacoplada.");
+
+            // PAdES-LT (RUNBOOK.md 12.24): embeber, como una revisión
+            // incremental más, la cadena de certificados y la CRL/OCSP que
+            // YA se obtuvieron arriba para decidir confianza — así la firma
+            // se puede seguir validando más adelante sin depender de que esa
+            // misma CRL siga publicada. Best-effort, igual que el sello de
+            // tiempo (RUNBOOK.md 12.14): si algo falla acá, el documento
+            // sigue siendo un PAdES-B/T perfectamente válido — nunca se
+            // aborta la firma real por un fallo de esta mejora.
+            try
+            {
+                var material = new MaterialDss(
+                    confianzaCertificado.MaterialLargoPlazo.CadenaCertificadosDer,
+                    confianzaCertificado.MaterialLargoPlazo.CrlDer,
+                    confianzaCertificado.MaterialLargoPlazo.OcspRespuestaDer);
+                documentoPades = PdfDssWriter.AgregarDss(documentoPades, material);
+            }
+            catch (Exception) { /* PAdES-LT es una mejora, no un requisito para que la firma sea válida — ver comentario arriba */ }
         }
 
         var confirmacion = solicitud.ConfirmarFirma(request.FlujoFirmaId);
