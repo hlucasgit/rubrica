@@ -78,7 +78,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Propósito/políticas | Sí | 🟡 (KeyUsage sí, EKU/CertificatePolicies no) |
 | Validador independiente | Sí | 🟢 (API + visor, ver RUNBOOK 12.20) |
 | Registro de resultados de validación | Sí | 🟢 |
-| Pruebas automatizadas PKI | Sí | 🟡 (Trust/PAdES sí; PKCS#11 no) |
+| Pruebas automatizadas PKI | Sí | 🟢 (Trust/PAdES, RUNBOOK 12.15/12.17; PKCS#11 real contra SoftHSM2, RUNBOOK 12.26 — corre solo en entornos con ese toolchain, nunca en CI) |
 | Manual usuario | Sí | 🟢 (`manual-usuario-firmador-local.md`) |
 | Manual administrador | Sí | 🟢 (`manual-administrador.md`) |
 | Manual integración | Sí | 🟢 (`docs/05-integracion/manual-integracion-api.md`, base existente) |
@@ -93,15 +93,17 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 
 ## 5. Nota sobre pruebas PKCS#11 automatizadas
 
-El informe exige una batería automatizada contra PKCS#11 (certificado revocado, expirado, PIN incorrecto, tarjeta retirada). La vía estándar es **SoftHSM2** (proyecto open-source de OpenDNSSEC) como token de software para CI.
+**Resuelto (RUNBOOK.md 12.26)**. El informe exige una batería automatizada contra PKCS#11 (certificado revocado, expirado, PIN incorrecto, tarjeta retirada). La vía estándar es **SoftHSM2** (proyecto open-source de OpenDNSSEC) como token de software para CI.
 
-**Intentado en esta sesión, bloqueado por infraestructura, no por decisión de diseño**: el proyecto SoftHSM2 no publica un binario Windows precompilado — su release oficial (`github.com/opendnssec/SoftHSMv2`) es únicamente código fuente. Compilarlo en Windows exige, según su propia guía (`CMAKE-WIN-NOTES.md`): Visual Studio con toolchain C++, CMake, y `vcpkg` para construir a su vez OpenSSL, Botan, cppunit y sqlite3 para x86 y x64 — ninguna de estas herramientas está instalada en el entorno de desarrollo usado en esta sesión, y instalarlas todas es una tarea de varios GB y 30-60+ minutos, deliberadamente pospuesta (decisión explícita del usuario, no una limitación técnica oculta).
+El bloqueo real era el toolchain: SoftHSM2 no publica un binario Windows precompilado, solo código fuente, y compilarlo exige Visual Studio con toolchain C++, CMake y vcpkg. Este toolchain se instaló en esta sesión (workload "Desarrollo para el escritorio con C++" agregado a Visual Studio 2022 Community ya presente, CMake vía `winget`, vcpkg clonado/bootstrapeado) y SoftHSM2 se compiló real para `x64-windows` con backend OpenSSL — ver RUNBOOK.md 12.26 para los tres hallazgos reales encontrados en el camino (elevación requerida para `vs_installer --quiet`, truncamiento de ruta con espacios en `-ArgumentList` + `-Verb RunAs`, y la ruta de módulo PKCS#11 por defecto de `softhsm2-util` no coincidiendo con la de instalación real).
 
-**Queda como tarea pendiente, con la vía de solución ya identificada y sin ningún cambio de código pendiente del lado de Rúbrica**: cuando exista un entorno con Visual Studio + CMake + vcpkg (o un binario SoftHSM2 ya compilado por otra vía), el trabajo restante es puramente de pruebas: inicializar un token de prueba (`softhsm2-util --init-token`), generar un par de llaves RSA de prueba, y wirear `ProveedorCriptograficoPkcs11` contra esa librería en un test de integración — la clase ya recibe la ruta de la librería PKCS#11 por configuración (`Pkcs11Options.RutaLibreria`), así que no hace falta ningún cambio de diseño para habilitarlo.
+8 pruebas nuevas (`tests/SecureSign.UnitTests/Crypto/ProveedorCriptograficoPkcs11Tests.cs`) contra `ProveedorCriptograficoPkcs11` real, con un certificado de prueba real importado al token (misma forma que un certificado DNIe: RSA-2048, BasicConstraints CA=false, etiqueta `FIR`) — cubren descubrimiento del certificado, firma+verificación, contenido alterado, **PIN incorrecto** (la fila explícita del informe), sin PIN, firma en lote, lote con firmantes distintos, y slot inexistente. Corren solo en un entorno con este SoftHSM2 compilado — nunca en CI (mismo patrón ya usado para la TSL real en RUNBOOK 12.22) — reproducible en cualquier máquina Windows siguiendo los mismos pasos, documentados en RUNBOOK.md 12.26 y en el propio comentario de clase del archivo de pruebas.
+
+**Alcance no cubierto todavía**: certificado revocado/expirado real (esa validación vive en `SecureSign.Trust`, ya probada por separado en RUNBOOK 12.17, no en el proveedor PKCS#11 en sí) y el evento físico de "tarjeta retirada a mitad de operación" (SoftHSM2 no lo simula de la misma forma que un token USB real).
 
 ## 6. Próximos pasos recomendados (por valor/esfuerzo)
 
-1. Instalar la cadena de build (Visual Studio C++ + CMake + vcpkg), compilar SoftHSM2, y escribir la batería de pruebas PKCS#11 de la sección 13 del informe — pospuesto por costo de tiempo/disco, no por decisión técnica (ver sección 5).
+1. ~~Instalar la cadena de build (Visual Studio C++ + CMake + vcpkg), compilar SoftHSM2, y escribir la batería de pruebas PKCS#11 de la sección 13 del informe~~ — hecho (RUNBOOK 12.26), 8 pruebas nuevas contra un `ProveedorCriptograficoPkcs11` real. Corren solo en un entorno con este SoftHSM2 compilado, nunca en CI (ver sección 5). Queda certificado revocado/expirado real y el evento físico de tarjeta retirada.
 2. ~~Redactar manual de usuario y manual de administrador~~ — hecho (`manual-usuario-firmador-local.md`, `manual-administrador.md`).
 3. Adquirir un certificado de firma de código (procura, no ingeniería) para cerrar P0-06 por completo.
 4. ~~Migrar JWT HS256 → RS256, Gateway como único firmante~~ — hecho (RUNBOOK 12.21). Queda un IdP externo real (Keycloak/Duende) con Authorization Code/PKCE, deliberadamente diferido.
