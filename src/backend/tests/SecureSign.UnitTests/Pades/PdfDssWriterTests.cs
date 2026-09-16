@@ -1,9 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
 using SecureSign.Pades;
+using static SecureSign.UnitTests.Pades.PdfDePruebaHelper;
 
 namespace SecureSign.UnitTests.Pades;
 
@@ -17,25 +16,6 @@ namespace SecureSign.UnitTests.Pades;
 /// </summary>
 public sealed class PdfDssWriterTests
 {
-    private static byte[] CrearPdfMinimo(string texto)
-    {
-        using var documento = new PdfDocument();
-        var pagina = documento.AddPage();
-        using var graficos = XGraphics.FromPdfPage(pagina);
-        graficos.DrawString(texto, new XFont("Arial", 14), XBrushes.Black, new XPoint(40, 60));
-        using var buffer = new MemoryStream();
-        documento.Save(buffer);
-        return buffer.ToArray();
-    }
-
-    private static byte[] FirmarConCertificadoDePrueba(byte[] pdfActual, CertificadoDePruebaHelper.ParFirmante firmante)
-    {
-        var preparado = PdfSignaturePlaceholder.Preparar(pdfActual, firmante.Certificado.GetNameInfo(System.Security.Cryptography.X509Certificates.X509NameType.SimpleName, false), "Prueba automatizada", DateTimeOffset.UtcNow);
-        byte[] cms = CmsBuilder.Firmar(preparado.ContenidoCubierto, firmante.Certificado, cadenaCertificacion: null,
-            datos => firmante.Rsa.SignData(datos, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
-        return PdfSignaturePlaceholder.Inyectar(preparado, cms);
-    }
-
     private static byte[] FabricarBytesDePrueba(string semilla, int longitud)
     {
         // No hace falta que sean DER real y válido — PdfDssWriter solo los
@@ -111,8 +91,9 @@ public sealed class PdfDssWriterTests
         byte[] certRaiz = FabricarBytesDePrueba("cert-raiz", 350);
         byte[] crl = FabricarBytesDePrueba("crl", 900);
 
+        byte[] cms = CmsDeLaUltimaFirma(pdfFirmado);
         var material = new MaterialDss([certHoja, certRaiz], crl, OcspRespuestaDer: null);
-        byte[] pdfConDss = PdfDssWriter.AgregarDss(pdfFirmado, material);
+        byte[] pdfConDss = PdfDssWriter.AgregarDss(pdfFirmado, cms, material);
 
         string textoDss = ExtraerTextoDss(pdfConDss);
         Assert.Contains("/Type /DSS", textoDss, StringComparison.Ordinal);
@@ -123,8 +104,7 @@ public sealed class PdfDssWriterTests
         // La clave VRI es el SHA-1 en hex MAYÚSCULAS del CMS exacto de la
         // última firma — se recalcula de forma independiente aquí, sin
         // llamar a PdfDssWriter, y debe coincidir.
-        var verificacion = PdfSignatureVerifier.VerificarUltima(pdfFirmado);
-        string claveVriEsperada = Convert.ToHexString(SHA1.HashData(verificacion.CmsDer!));
+        string claveVriEsperada = Convert.ToHexString(SHA1.HashData(cms));
         Assert.Contains($"/{claveVriEsperada} <<", textoDss, StringComparison.Ordinal);
 
         // Los objetos de /Certs y /CRLs referenciados deben contener EXACTAMENTE los bytes originales.
@@ -145,7 +125,7 @@ public sealed class PdfDssWriterTests
         byte[] pdfFirmado = FirmarConCertificadoDePrueba(CrearPdfMinimo("documento LT"), firmante);
 
         var material = new MaterialDss([FabricarBytesDePrueba("c", 300)], FabricarBytesDePrueba("r", 500), null);
-        byte[] pdfConDss = PdfDssWriter.AgregarDss(pdfFirmado, material);
+        byte[] pdfConDss = PdfDssWriter.AgregarDss(pdfFirmado, CmsDeLaUltimaFirma(pdfFirmado), material);
 
         var resultado = PdfSignatureVerifier.VerificarUltima(pdfConDss);
         Assert.True(resultado.Valido, resultado.Error);
@@ -158,7 +138,7 @@ public sealed class PdfDssWriterTests
         byte[] pdfFirmado = FirmarConCertificadoDePrueba(CrearPdfMinimo("documento"), firmante);
 
         var material = new MaterialDss([FabricarBytesDePrueba("c", 200)], CrlDer: null, OcspRespuestaDer: null);
-        byte[] pdfConDss = PdfDssWriter.AgregarDss(pdfFirmado, material);
+        byte[] pdfConDss = PdfDssWriter.AgregarDss(pdfFirmado, CmsDeLaUltimaFirma(pdfFirmado), material);
 
         string textoDss = ExtraerTextoDss(pdfConDss);
         Assert.Equal(1, ContarReferenciasEnArray(textoDss, "/Certs"));
@@ -174,17 +154,17 @@ public sealed class PdfDssWriterTests
 
         using var firmanteA = CertificadoDePruebaHelper.GenerarFirmante("Firmante A");
         pdf = FirmarConCertificadoDePrueba(pdf, firmanteA);
-        var verificacionA = PdfSignatureVerifier.VerificarUltima(pdf);
-        string claveVriA = Convert.ToHexString(SHA1.HashData(verificacionA.CmsDer!));
+        byte[] cmsA = CmsDeLaUltimaFirma(pdf);
+        string claveVriA = Convert.ToHexString(SHA1.HashData(cmsA));
         byte[] certA = FabricarBytesDePrueba("cert-A", 300);
-        pdf = PdfDssWriter.AgregarDss(pdf, new MaterialDss([certA], FabricarBytesDePrueba("crl-A", 400), null));
+        pdf = PdfDssWriter.AgregarDss(pdf, cmsA, new MaterialDss([certA], FabricarBytesDePrueba("crl-A", 400), null));
 
         using var firmanteB = CertificadoDePruebaHelper.GenerarFirmante("Firmante B");
         pdf = FirmarConCertificadoDePrueba(pdf, firmanteB);
-        var verificacionB = PdfSignatureVerifier.VerificarUltima(pdf);
-        string claveVriB = Convert.ToHexString(SHA1.HashData(verificacionB.CmsDer!));
+        byte[] cmsB = CmsDeLaUltimaFirma(pdf);
+        string claveVriB = Convert.ToHexString(SHA1.HashData(cmsB));
         byte[] certB = FabricarBytesDePrueba("cert-B", 300);
-        pdf = PdfDssWriter.AgregarDss(pdf, new MaterialDss([certB], FabricarBytesDePrueba("crl-B", 400), null));
+        pdf = PdfDssWriter.AgregarDss(pdf, cmsB, new MaterialDss([certB], FabricarBytesDePrueba("crl-B", 400), null));
 
         string textoDssFinal = ExtraerTextoDss(pdf);
         Assert.Contains($"/{claveVriA} <<", textoDssFinal, StringComparison.Ordinal);
@@ -198,12 +178,24 @@ public sealed class PdfDssWriterTests
         Assert.All(todas, r => Assert.True(r.Valido, r.Error));
     }
 
+    /// <summary>
+    /// AgregarDss ya no extrae el CMS por su cuenta (RUNBOOK.md 12.24, hallazgo
+    /// de eficiencia: el llamador ya lo tiene tras verificar la firma, así que
+    /// no tiene sentido volver a decodificar y re-verificar todo el PDF para
+    /// recalcularlo) — por eso un PDF sin firmar ya no es una precondición
+    /// que esta clase deba detectar: quien SÍ debe detectarlo es
+    /// PdfSignatureVerifier, antes de siquiera intentar extraer un CMS que no
+    /// existe (así es como FirmarLocalHandler nunca llega a llamar AgregarDss
+    /// en ese caso — corta el flujo en verificacionPades.Valido == false).
+    /// </summary>
     [Fact]
-    public void Sin_ninguna_firma_previa_lanza()
+    public void Sin_ninguna_firma_previa_no_hay_cms_que_extraer()
     {
         byte[] pdfSinFirmar = CrearPdfMinimo("documento sin firmar");
-        var material = new MaterialDss([FabricarBytesDePrueba("c", 100)], null, null);
 
-        Assert.Throws<InvalidOperationException>(() => PdfDssWriter.AgregarDss(pdfSinFirmar, material));
+        var verificacion = PdfSignatureVerifier.VerificarUltima(pdfSinFirmar);
+
+        Assert.False(verificacion.Valido);
+        Assert.Null(verificacion.CmsDer);
     }
 }

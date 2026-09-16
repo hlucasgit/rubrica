@@ -26,12 +26,11 @@ public sealed class VerificadorFirmaTslTests : IDisposable
 
     static VerificadorFirmaTslTests()
     {
-        // Mismo registro que el constructor estático de VerificadorFirmaTsl
-        // (internal a SecureSign.Trust, no visible desde aquí) — hace falta
-        // ANTES de firmar el fixture de prueba, así que se repite aquí con
-        // una copia local del describer (ver comentario de la clase al
-        // final del archivo).
-        CryptoConfig.AddAlgorithm(typeof(RsaPkcs1Sha256SignatureDescriptionDePrueba), "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256");
+        // Mismo registro que el constructor estático de VerificadorFirmaTsl —
+        // hace falta ANTES de firmar el fixture de prueba. RsaPkcs1Sha256SignatureDescription
+        // es public en SecureSign.Trust (CryptoConfig.AddAlgorithm lo exige),
+        // así que se reutiliza directamente en vez de duplicarla aquí.
+        CryptoConfig.AddAlgorithm(typeof(RsaPkcs1Sha256SignatureDescription), "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256");
         CryptoConfig.AddAlgorithm(typeof(XmlDsigC14NTransform), "http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
     }
 
@@ -145,37 +144,5 @@ public sealed class VerificadorFirmaTslTests : IDisposable
         var anclaReal = new X509Certificate2(rutaAncla);
         var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(rutaTsl, anclaReal));
         Assert.Contains("NO verifica", ex.Message);
-    }
-}
-
-/// <summary>
-/// Copia local, solo para firmar los fixtures de prueba de este archivo —
-/// evita depender del tipo real de producción (<c>SecureSign.Trust.RsaPkcs1Sha256SignatureDescription</c>)
-/// para mantener el test self-contained. Mismos valores en ambas
-/// (confirmados por reflexión contra el tipo interno real de Microsoft,
-/// ver comentario en VerificadorFirmaTsl.cs).
-/// </summary>
-public sealed class RsaPkcs1Sha256SignatureDescriptionDePrueba : System.Security.Cryptography.SignatureDescription
-{
-    public RsaPkcs1Sha256SignatureDescriptionDePrueba()
-    {
-        KeyAlgorithm = typeof(RSA).AssemblyQualifiedName;
-        DigestAlgorithm = "SHA256";
-        FormatterAlgorithm = typeof(RSAPKCS1SignatureFormatter).AssemblyQualifiedName;
-        DeformatterAlgorithm = typeof(RSAPKCS1SignatureDeformatter).AssemblyQualifiedName;
-    }
-
-    public override AsymmetricSignatureDeformatter CreateDeformatter(AsymmetricAlgorithm key)
-    {
-        var deformatter = new RSAPKCS1SignatureDeformatter(key);
-        deformatter.SetHashAlgorithm("SHA256");
-        return deformatter;
-    }
-
-    public override AsymmetricSignatureFormatter CreateFormatter(AsymmetricAlgorithm key)
-    {
-        var formatter = new RSAPKCS1SignatureFormatter(key);
-        formatter.SetHashAlgorithm("SHA256");
-        return formatter;
     }
 }

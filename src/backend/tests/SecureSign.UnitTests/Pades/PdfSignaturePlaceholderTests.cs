@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
 using SecureSign.Pades;
+using static SecureSign.UnitTests.Pades.PdfDePruebaHelper;
 
 namespace SecureSign.UnitTests.Pades;
 
@@ -14,25 +13,6 @@ namespace SecureSign.UnitTests.Pades;
 /// </summary>
 public sealed class PdfSignaturePlaceholderTests
 {
-    private static byte[] CrearPdfMinimo(string texto)
-    {
-        using var documento = new PdfDocument();
-        var pagina = documento.AddPage();
-        using var graficos = XGraphics.FromPdfPage(pagina);
-        graficos.DrawString(texto, new XFont("Arial", 14), XBrushes.Black, new XPoint(40, 60));
-        using var buffer = new MemoryStream();
-        documento.Save(buffer);
-        return buffer.ToArray();
-    }
-
-    private static byte[] FirmarConCertificadoDePrueba(byte[] pdfActual, CertificadoDePruebaHelper.ParFirmante firmante)
-    {
-        var preparado = PdfSignaturePlaceholder.Preparar(pdfActual, firmante.Certificado.GetNameInfo(System.Security.Cryptography.X509Certificates.X509NameType.SimpleName, false), "Prueba automatizada", DateTimeOffset.UtcNow);
-        byte[] cms = CmsBuilder.Firmar(preparado.ContenidoCubierto, firmante.Certificado, cadenaCertificacion: null,
-            datos => firmante.Rsa.SignData(datos, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
-        return PdfSignaturePlaceholder.Inyectar(preparado, cms);
-    }
-
     /// <summary>Fila del informe: "PAdES con una firma → Todas válidas".</summary>
     [Fact]
     public void Una_firma_es_valida()

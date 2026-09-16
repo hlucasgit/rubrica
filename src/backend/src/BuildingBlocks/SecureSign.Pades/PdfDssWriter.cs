@@ -50,20 +50,24 @@ public sealed record MaterialDss(
 /// </summary>
 public static class PdfDssWriter
 {
-    /// <exception cref="InvalidOperationException">El PDF no tiene ninguna firma válida de la que extraer el CMS (clave VRI).</exception>
-    public static byte[] AgregarDss(byte[] pdfFirmado, MaterialDss material)
+    /// <param name="cmsDeLaUltimaFirma">
+    /// El CMS (DER) de la última firma del PDF, ya extraído y verificado por
+    /// el llamador — normalmente <see cref="PdfSignatureVerifier.ResultadoVerificacionPades.CmsDer"/>
+    /// de la misma llamada a <see cref="PdfSignatureVerifier.VerificarUltima"/>
+    /// que el llamador ya tuvo que hacer para confirmar que la firma es
+    /// válida antes de llegar aquí. Deliberadamente NO se vuelve a extraer
+    /// ni a re-verificar aquí — eso implicaría decodificar el PDF completo y
+    /// repetir la verificación criptográfica RSA por segunda vez en la misma
+    /// operación de firma, solo para recalcular algo que el llamador ya tiene.
+    /// </param>
+    public static byte[] AgregarDss(byte[] pdfFirmado, byte[] cmsDeLaUltimaFirma, MaterialDss material)
     {
-        var verificacion = PdfSignatureVerifier.VerificarUltima(pdfFirmado);
-        if (verificacion.CmsDer is not { Length: > 0 } cms)
-            throw new InvalidOperationException("No se pudo extraer el CMS de la última firma del PDF — no se puede calcular la clave VRI del DSS.");
-
         // ISO 32000-2 §12.8.4.3: la clave VRI es el SHA-1, en hexadecimal
         // MAYÚSCULAS, del valor BINARIO exacto de /Contents de esa firma —
         // nunca del texto hexadecimal que aparece en el PDF, y nunca del
-        // hueco completo relleno de ceros (por eso se usa el CMS ya
-        // recortado por longitud DER real, el mismo que PdfSignatureVerifier
-        // usó para verificar la firma).
-        string claveVri = Convert.ToHexString(SHA1.HashData(cms));
+        // hueco completo relleno de ceros (por eso hace falta el CMS ya
+        // recortado por longitud DER real, no los bytes crudos de /Contents).
+        string claveVri = Convert.ToHexString(SHA1.HashData(cmsDeLaUltimaFirma));
 
         long longitudOriginal = pdfFirmado.LongLength;
         long prevStartXref = PdfSignaturePlaceholder.EncontrarUltimoStartXref(pdfFirmado);

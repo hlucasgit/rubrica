@@ -34,6 +34,9 @@ namespace SecureSign.Pades;
 /// necesita <c>PdfDssWriter</c> para calcular la clave VRI de PAdES-LT
 /// (SHA-1 del valor exacto de /Contents, ISO 32000-2 §12.8.4.3, RUNBOOK.md
 /// 12.24) — se reutilizan en vez de volver a parsear el PDF desde cero.
+/// null cuando <see cref="EsSelloDeArchivo"/> es true (el token ya vive en
+/// <see cref="TokenTsaDer"/>; no hay VRI que calcular para un sello, así que
+/// nada lo necesita ahí).
 /// </param>
 /// <param name="EsSelloDeArchivo">
 /// true si esta entrada es un sello de tiempo de ARCHIVO (PAdES-LTA,
@@ -264,7 +267,7 @@ public static class PdfSignatureVerifier
             var certificadoTsaBc = token.GetCertificates().EnumerateMatches(token.SignerID).FirstOrDefault();
             if (certificadoTsaBc is null)
                 return new ResultadoVerificacionPades(false, null, null, null, tokenDer,
-                    "El sello de tiempo de archivo no incluye el certificado de la TSA que lo firmó.", tokenDer, EsSelloDeArchivo: true);
+                    "El sello de tiempo de archivo no incluye el certificado de la TSA que lo firmó.", EsSelloDeArchivo: true);
 
             bool firmaTokenValida;
             try { token.Validate(certificadoTsaBc); firmaTokenValida = true; }
@@ -280,12 +283,12 @@ public static class PdfSignatureVerifier
                 : "El sello de tiempo de archivo no corresponde al contenido actual del documento (messageImprint no coincide) — el archivo pudo alterarse después de sellarse.";
 
             return new ResultadoVerificacionPades(
-                valido, null, certificadoTsaNet, token.TimeStampInfo.GenTime, tokenDer, error, tokenDer, EsSelloDeArchivo: true);
+                valido, null, certificadoTsaNet, token.TimeStampInfo.GenTime, tokenDer, error, EsSelloDeArchivo: true);
         }
         catch (Exception ex)
         {
             return new ResultadoVerificacionPades(false, null, null, null, null,
-                $"No se pudo procesar el sello de tiempo de archivo: {ex.Message}", null, EsSelloDeArchivo: true);
+                $"No se pudo procesar el sello de tiempo de archivo: {ex.Message}", EsSelloDeArchivo: true);
         }
     }
 

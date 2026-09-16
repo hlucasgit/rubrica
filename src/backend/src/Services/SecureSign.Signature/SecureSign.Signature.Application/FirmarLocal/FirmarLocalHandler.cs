@@ -181,7 +181,11 @@ public sealed class FirmarLocalHandler(
                     confianzaCertificado.MaterialLargoPlazo.CadenaCertificadosDer,
                     confianzaCertificado.MaterialLargoPlazo.CrlDer,
                     confianzaCertificado.MaterialLargoPlazo.OcspRespuestaDer);
-                documentoPades = PdfDssWriter.AgregarDss(documentoPades, material);
+                // El CMS ya se extrajo y se verificó como válido arriba
+                // (verificacionPades.Valido) — reusarlo evita repetir la
+                // verificación criptográfica RSA completa del PDF una
+                // segunda vez solo para recalcular la clave VRI.
+                documentoPades = PdfDssWriter.AgregarDss(documentoPades, verificacionPades.CmsDer!, material);
             }
             catch (Exception) { /* PAdES-LT es una mejora, no un requisito para que la firma sea válida — ver comentario arriba */ }
 

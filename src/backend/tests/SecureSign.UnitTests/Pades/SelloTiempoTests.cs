@@ -1,16 +1,7 @@
 using System.Security.Cryptography;
-using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Cms;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Operators;
-using Org.BouncyCastle.Math;
-using Org.BouncyCastle.Security;
-using Org.BouncyCastle.Tsp;
-using Org.BouncyCastle.Utilities.Collections;
-using Org.BouncyCastle.X509;
 using SecureSign.Pades;
 using SecureSign.Tsa;
-using BcX509Certificate = Org.BouncyCastle.X509.X509Certificate;
 
 namespace SecureSign.UnitTests.Pades;
 
@@ -24,49 +15,10 @@ namespace SecureSign.UnitTests.Pades;
 /// </summary>
 public sealed class SelloTiempoTests
 {
-    /// <summary>Emisor de sellos de tiempo 100% local — mismo protocolo RFC 3161 que SecureSign.Tsa.ClienteTsaRfc3161, pero firmando con una llave generada en memoria, sin ninguna llamada de red.</summary>
-    private static (TimeStampTokenGenerator Generador, BcX509Certificate Certificado) CrearTsaDePrueba()
-    {
-        var generadorLlaves = GeneratorUtilities.GetKeyPairGenerator("RSA");
-        generadorLlaves.Init(new KeyGenerationParameters(new SecureRandom(), 2048));
-        var parLlaves = generadorLlaves.GenerateKeyPair();
-
-        var nombre = new X509Name("CN=TSA de prueba offline");
-        var generadorCert = new X509V3CertificateGenerator();
-        generadorCert.SetSerialNumber(BigInteger.ValueOf(1));
-        generadorCert.SetIssuerDN(nombre);
-        generadorCert.SetSubjectDN(nombre);
-        generadorCert.SetNotBefore(DateTime.UtcNow.AddDays(-1));
-        generadorCert.SetNotAfter(DateTime.UtcNow.AddYears(1));
-        generadorCert.SetPublicKey(parLlaves.Public);
-        generadorCert.AddExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(KeyPurposeID.id_kp_timeStamping));
-        generadorCert.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(false));
-        BcX509Certificate certificado = generadorCert.Generate(new Asn1SignatureFactory("SHA256WITHRSA", parLlaves.Private));
-
-        var generadorToken = new TimeStampTokenGenerator(parLlaves.Private, certificado, TspAlgorithms.Sha256, "1.2.3.4.5.6");
-        generadorToken.SetCertificates(CollectionUtilities.CreateStore(new[] { certificado }));
-
-        return (generadorToken, certificado);
-    }
-
-    private static byte[] SellarLocalmente(TimeStampTokenGenerator tsa, byte[] hash)
-    {
-        // SetCertReq(true) es imprescindible: BouncyCastle solo incrusta el
-        // certificado de la TSA en el token si la SOLICITUD lo pidió, sin
-        // importar que el generador ya tenga SetCertificates(...) — el
-        // cliente real (ClienteTsaRfc3161) ya hace esto correctamente, este
-        // detalle solo faltaba aquí, en el ayudante de pruebas offline.
-        var generadorSolicitud = new TimeStampRequestGenerator();
-        generadorSolicitud.SetCertReq(true);
-        var solicitud = generadorSolicitud.Generate(TspAlgorithms.Sha256, hash, BigInteger.ValueOf(new Random().Next()));
-        var token = tsa.Generate(solicitud, BigInteger.ValueOf(1), DateTime.UtcNow);
-        return token.GetEncoded();
-    }
-
     [Fact]
     public void Sello_incrustado_se_extrae_identico_y_verifica()
     {
-        var (tsa, _) = CrearTsaDePrueba();
+        var (tsa, _) = TsaDePruebaHelper.CrearTsaDePrueba();
 
         using var firmante = CertificadoDePruebaHelper.GenerarFirmante("Firmante PAdES-T");
         byte[] contenido = "contenido de prueba"u8.ToArray();
@@ -74,7 +26,7 @@ public sealed class SelloTiempoTests
             datos => firmante.Rsa.SignData(datos, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
 
         byte[] hashFirma = SHA256.HashData(CmsBuilder.ObtenerBytesFirma(cms));
-        byte[] tokenDer = SellarLocalmente(tsa, hashFirma);
+        byte[] tokenDer = TsaDePruebaHelper.SellarLocalmente(tsa, hashFirma);
 
         byte[] cmsConSello = CmsBuilder.AgregarSelloTiempo(cms, tokenDer);
         byte[]? tokenExtraido = CmsBuilder.ExtraerSelloTiempo(cmsConSello);
@@ -90,14 +42,14 @@ public sealed class SelloTiempoTests
     [Fact]
     public void Agregar_sello_no_invalida_la_firma_cms_original()
     {
-        var (tsa, _) = CrearTsaDePrueba();
+        var (tsa, _) = TsaDePruebaHelper.CrearTsaDePrueba();
 
         using var firmante = CertificadoDePruebaHelper.GenerarFirmante("Firmante PAdES-T");
         byte[] contenido = "contenido cubierto"u8.ToArray();
         byte[] cms = CmsBuilder.Firmar(contenido, firmante.Certificado, cadenaCertificacion: null,
             datos => firmante.Rsa.SignData(datos, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
 
-        byte[] tokenDer = SellarLocalmente(tsa, SHA256.HashData(CmsBuilder.ObtenerBytesFirma(cms)));
+        byte[] tokenDer = TsaDePruebaHelper.SellarLocalmente(tsa, SHA256.HashData(CmsBuilder.ObtenerBytesFirma(cms)));
         byte[] cmsConSello = CmsBuilder.AgregarSelloTiempo(cms, tokenDer);
 
         var datosFirmados = new CmsSignedData(new CmsProcessableByteArray(contenido), cmsConSello);
@@ -110,8 +62,8 @@ public sealed class SelloTiempoTests
     [Fact]
     public void Token_alterado_no_verifica()
     {
-        var (tsa, _) = CrearTsaDePrueba();
-        byte[] tokenDer = SellarLocalmente(tsa, SHA256.HashData("cualquier cosa"u8.ToArray()));
+        var (tsa, _) = TsaDePruebaHelper.CrearTsaDePrueba();
+        byte[] tokenDer = TsaDePruebaHelper.SellarLocalmente(tsa, SHA256.HashData("cualquier cosa"u8.ToArray()));
 
         byte[] tokenAlterado = (byte[])tokenDer.Clone();
         tokenAlterado[^10] ^= 0xFF; // altera un byte cerca del final (dentro de la firma del token)
