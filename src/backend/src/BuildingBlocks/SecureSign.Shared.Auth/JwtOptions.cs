@@ -50,6 +50,21 @@ public sealed class JwtOptions
     public string SecretoClienteInterno { get; set; } = default!;
 
     /// <summary>
+    /// SOLO el Gateway: secretos adicionales que <c>POST /api/auth/interno/emitir</c>
+    /// sigue aceptando además de <see cref="SecretoClienteInterno"/> — es el
+    /// mecanismo de rotación sin corte. Procedimiento (RUNBOOK.md 12.27): (1)
+    /// poner el secreto nuevo aquí y desplegar el Gateway; (2) cambiar
+    /// <see cref="SecretoClienteInterno"/> en cada servicio emisor al valor
+    /// nuevo; (3) cuando todos migraron, mover el nuevo a
+    /// <see cref="SecretoClienteInterno"/> del Gateway y vaciar esta lista.
+    /// </summary>
+    public string[] SecretosClienteInternoAdicionales { get; set; } = [];
+
+    /// <summary>Todos los secretos internos no vacíos que esta instancia acepta o usa.</summary>
+    public IEnumerable<string> SecretosInternosAceptados() =>
+        new[] { SecretoClienteInterno }.Concat(SecretosClienteInternoAdicionales).Where(s => !string.IsNullOrEmpty(s));
+
+    /// <summary>
     /// Directorio donde el Gateway persiste sus llaves RSA (ver RsaKeyStore)
     /// — SOLO lo usa el Gateway. Deliberadamente fuera del repositorio y
     /// fuera de este mismo archivo de configuración: es la pieza que cierra

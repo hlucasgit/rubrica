@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace SecureSign.Shared.Auth;
@@ -104,7 +106,15 @@ public static class ServiceCollectionExtensions
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SeccionConfiguracion));
         services.AddSingleton<RsaKeyStore>();
         services.AddSingleton<JwtTokenService>();
+        AgregarValidacionDeArranque(services);
         return services;
+    }
+
+    /// <summary>Falla el arranque si un secreto interno es el de desarrollo o demasiado corto fuera de Development — ver <see cref="ValidadorOpcionesJwt"/>.</summary>
+    private static void AgregarValidacionDeArranque(IServiceCollection services)
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<JwtOptions>, ValidadorOpcionesJwt>());
+        services.AddOptions<JwtOptions>().ValidateOnStart();
     }
 
     /// <summary>
@@ -131,6 +141,7 @@ public static class ServiceCollectionExtensions
             client.DefaultRequestHeaders.Add("X-Internal-Client-Secret", opciones.SecretoClienteInterno);
         });
         services.AddSingleton<TokenExchangeService>();
+        AgregarValidacionDeArranque(services);
         return services;
     }
 }

@@ -15,6 +15,13 @@ services:
       dockerfile: src/Gateway/SecureSign.Gateway/Dockerfile
     ports:
       - "8080:8080"
+    environment:
+      # Compose de desarrollo: Development habilita el secreto de ejemplo
+      # (ver ValidadorOpcionesJwt, RUNBOOK.md 12.27). Para sobreescribirlo sin
+      # tocar appsettings.json: SECRETO_CLIENTE_INTERNO en un .env junto a este
+      # archivo — debe ser el MISMO valor en gateway, documents y signature.
+      ASPNETCORE_ENVIRONMENT: "Development"
+      Jwt__SecretoClienteInterno: "${SECRETO_CLIENTE_INTERNO:-dev-only-internal-client-secret-do-not-use-in-production}"
     volumes:
       # Llaves RSA de firma (ver RsaKeyStore, RUNBOOK.md 12.21) — en un
       # volumen nombrado, no en la imagen ni en el repo, para que sobrevivan
@@ -102,6 +109,13 @@ services:
       context: .
       dockerfile: src/Services/SecureSign.Documents/SecureSign.Documents.Api/Dockerfile
     expose: ["8080"]
+    environment:
+      # Compose de desarrollo: Development habilita el secreto de ejemplo
+      # (ver ValidadorOpcionesJwt, RUNBOOK.md 12.27). Para sobreescribirlo sin
+      # tocar appsettings.json: SECRETO_CLIENTE_INTERNO en un .env junto a este
+      # archivo — debe ser el MISMO valor en gateway, documents y signature.
+      ASPNETCORE_ENVIRONMENT: "Development"
+      Jwt__SecretoClienteInterno: "${SECRETO_CLIENTE_INTERNO:-dev-only-internal-client-secret-do-not-use-in-production}"
     volumes:
       # AlmacenamientoDocumentalLocal (solo para desarrollo, ver su propio
       # comentario) escribe en /tmp/securesign-documentos DENTRO del
@@ -120,6 +134,12 @@ services:
       dockerfile: src/Services/SecureSign.Signature/SecureSign.Signature.Api/Dockerfile
     expose: ["8080"]
     environment:
+      # Compose de desarrollo: Development habilita el secreto de ejemplo
+      # (ver ValidadorOpcionesJwt, RUNBOOK.md 12.27). Para sobreescribirlo sin
+      # tocar appsettings.json: SECRETO_CLIENTE_INTERNO en un .env junto a este
+      # archivo — debe ser el MISMO valor en gateway, documents y signature.
+      ASPNETCORE_ENVIRONMENT: "Development"
+      Jwt__SecretoClienteInterno: "${SECRETO_CLIENTE_INTERNO:-dev-only-internal-client-secret-do-not-use-in-production}"
       # Por defecto apunta al Crypto.Api en Docker (proveedor de software).
       # Para firmar con un token PKCS#11 real (DNIe u otro), corre
       # Crypto.Api NATIVO en Windows (no se puede en un contenedor Linux) y
