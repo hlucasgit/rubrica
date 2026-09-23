@@ -53,6 +53,18 @@ public sealed class AuthController(JwtTokenService tokenService, IOptions<Client
         System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
             System.Text.Encoding.UTF8.GetBytes(a), System.Text.Encoding.UTF8.GetBytes(b));
 
+    /// <summary>
+    /// Compara contra TODOS los secretos aceptados (actual + los de rotación
+    /// en curso) sin cortocircuitar, para no filtrar por tiempo cuál coincidió.
+    /// </summary>
+    private bool SecretoInternoValido(string recibido)
+    {
+        bool coincide = false;
+        foreach (var aceptado in jwtOpciones.Value.SecretosInternosAceptados())
+            coincide |= CryptographicEquals(aceptado, recibido);
+        return coincide;
+    }
+
     public sealed record EmitirTokenInternoRequest(Dictionary<string, string> Claims, string Audiencia, int MinutosExpiracion);
 
     /// <summary>
@@ -69,7 +81,7 @@ public sealed class AuthController(JwtTokenService tokenService, IOptions<Client
     public IActionResult EmitirInterno([FromBody] EmitirTokenInternoRequest body)
     {
         string? secretoRecibido = Request.Headers["X-Internal-Client-Secret"];
-        if (string.IsNullOrEmpty(secretoRecibido) || !CryptographicEquals(jwtOpciones.Value.SecretoClienteInterno, secretoRecibido))
+        if (string.IsNullOrEmpty(secretoRecibido) || !SecretoInternoValido(secretoRecibido))
             return Unauthorized(new { error = "SECRETO_INVALIDO", mensaje = "X-Internal-Client-Secret ausente o incorrecto." });
 
         if (body.Claims.Count == 0 || string.IsNullOrWhiteSpace(body.Audiencia) || body.MinutosExpiracion <= 0)
