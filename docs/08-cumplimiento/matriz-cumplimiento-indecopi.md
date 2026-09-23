@@ -54,7 +54,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Distribución/instalador firmado | 🔴 | 🔴 sin cambios | Idem |
 | JWT de producción | 🔴 | 🟡 | RS256 real, llave privada solo en el Gateway (RUNBOOK 12.21) — sigue sin ser un IdP acreditado (sin Authorization Code/PKCE, sin Keycloak/Duende externo) |
 | Secretos productivos | 🔴 | 🟡 | La llave de firma JWT ya está externalizada (`RsaKeyStore`, fuera de `appsettings.json`, RUNBOOK 12.21). `client_secret` de integradores demo ahora se guarda como hash Argon2id, nunca en texto plano (RUNBOOK 12.23). Sigue pendiente: rotación real de secretos (mecanismo listo, sin procedimiento) y `Jwt:SecretoClienteInterno`, que sigue en texto plano en `appsettings.json` |
-| Pruebas PKCS#11 automatizadas | 🔴 | 🔴 sin cambios | Necesita SoftHSM2 compilado desde fuente (no publica binario Windows); bloqueado por falta de toolchain (Visual Studio + CMake + vcpkg) en el entorno, pospuesto por decisión explícita (ver sección 5) |
+| Pruebas PKCS#11 automatizadas | 🔴 | 🟡 parcial | 8 pruebas contra SoftHSM2 real compilado localmente (RUNBOOK 12.26): descubrimiento, firma/verificación, PIN incorrecto, lote. Corren solo en entornos con ese toolchain, nunca en CI. Faltan certificado revocado/expirado real y tarjeta retirada (ver sección 5) |
 | Pruebas PAdES automatizadas | 🔴 | 🟢 | RUNBOOK 12.15 — batería que encontró y corrigió el bug real de truncamiento CMS |
 | Pruebas revocación/IOFE | 🔴 | 🟢 | RUNBOOK 12.17 — 15 pruebas, incluidas las que prueban el ataque (CRL/OCSP forjados) |
 | Pipeline CI | 🔴 (main falla) | 🟢 | P0-04 |
