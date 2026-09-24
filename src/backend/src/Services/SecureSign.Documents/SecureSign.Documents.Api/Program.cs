@@ -9,6 +9,9 @@ using SecureSign.Shared.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Secretos entregados como archivos (Docker/Kubernetes secrets) — precedencia máxima, ver RUNBOOK.md 12.30.
+builder.Configuration.AddSecureSignSecretosDeArchivo();
+
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();

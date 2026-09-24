@@ -27,12 +27,16 @@ public sealed class ValidadorOpcionesJwt(IHostEnvironment entorno) : IValidateOp
         var errores = new List<string>();
         if (esDesarrollo) return errores;
 
-        foreach (var secreto in opciones.SecretosInternosAceptados())
+        var secretos = new List<(string Origen, string Valor)> { ("Jwt:SecretoClienteInterno", opciones.SecretoClienteInterno) };
+        foreach (var servicio in opciones.ServiciosEmisores)
+            secretos.AddRange(servicio.Secretos.Select(s => ($"Jwt:ServiciosEmisores['{servicio.Nombre}']", s)));
+
+        foreach (var (origen, secreto) in secretos.Where(s => !string.IsNullOrEmpty(s.Valor)))
         {
             if (secreto.StartsWith(PrefijoDesarrollo, StringComparison.Ordinal))
-                errores.Add($"Jwt: un secreto interno usa el valor de desarrollo ('{PrefijoDesarrollo}...'); defínelo por variable de entorno o almacén de secretos fuera de Development.");
+                errores.Add($"{origen}: usa el valor de desarrollo ('{PrefijoDesarrollo}...'); defínelo por archivo de secretos, variable de entorno o almacén de secretos fuera de Development.");
             else if (secreto.Length < LongitudMinima)
-                errores.Add($"Jwt: un secreto interno tiene menos de {LongitudMinima} caracteres.");
+                errores.Add($"{origen}: tiene menos de {LongitudMinima} caracteres.");
         }
         return errores;
     }
