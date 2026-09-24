@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using SecureSign.Shared.Auth;
 
@@ -23,6 +24,7 @@ namespace SecureSign.Gateway.Controllers;
 public sealed class AuthController(JwtTokenService tokenService, IOptions<ClientesDemoOptions> clientesDemo, IOptions<JwtOptions> jwtOpciones) : ControllerBase
 {
     [HttpPost("token")]
+    [EnableRateLimiting(LimitacionDeTasa.PoliticaToken)]
     [Consumes("application/x-www-form-urlencoded")]
     public IActionResult ObtenerToken([FromForm] string grant_type, [FromForm] string client_id, [FromForm] string client_secret, [FromForm] string? scope)
     {
@@ -82,6 +84,7 @@ public sealed class AuthController(JwtTokenService tokenService, IOptions<Client
     /// deliberado que /api/interno/identidad/*, ver README.md.
     /// </summary>
     [HttpPost("interno/emitir")]
+    [EnableRateLimiting(LimitacionDeTasa.PoliticaInterno)]
     [AllowAnonymous]
     public IActionResult EmitirInterno([FromBody] EmitirTokenInternoRequest body)
     {

@@ -58,6 +58,8 @@ Ver [`RUNBOOK.md`](../../src/backend/RUNBOOK.md) secciones 1-3 para el procedimi
 }
 ```
 
+**Limitación de tasa** (RUNBOOK 12.29): el Gateway limita `POST /api/auth/token` (`LimitacionDeTasa:TokenPorMinuto`, 10) e `interno/emitir` (`InternoPorMinuto`, 3000) por IP y responde `429` con `Retry-After`. Detrás de un balanceador o proxy inverso hay que habilitar `ForwardedHeaders`, o todos los clientes compartirán el cupo del proxy.
+
 **Ya no hay ninguna llave de firma en `appsettings.json`** (RUNBOOK 12.21): el Gateway genera y persiste su propia llave RSA en `DirectorioLlaves` (volumen Docker `securesign_gateway_llaves`, fuera del repositorio) y la publica como JWKS; cualquier otro servicio la descubre solo, vía `Authority`. Lo que SÍ sigue en texto plano en `appsettings.json`, y debe reemplazarse antes de cualquier despliegue con datos reales: los `client_secret` de cada integrador en `ClientesDemo` (ya como hash Argon2id, RUNBOOK 12.23). Los secretos internos (`Jwt:SecretoClienteInterno` de Signature y Documents, y `Jwt:ServiciosEmisores[*].Secretos` del Gateway) traen valores `dev-only-...` de ejemplo en el repositorio; **fuera de `Development` el servicio no arranca con ellos** (ni con menos de 32 caracteres, RUNBOOK 12.27) — se entregan por variable de entorno (`Jwt__SecretoClienteInterno`, `Jwt__ServiciosEmisores__0__Secretos__0`, ...) o almacén de secretos. Cada servicio emisor tiene su secreto propio y el Gateway solo le firma los dos tipos de token que necesita (RUNBOOK 12.28); para rotar uno sin corte: agregar el secreto nuevo a `Secretos` de ese servicio en el Gateway, cambiar `SecretoClienteInterno` en el servicio, y retirar el viejo.
 
 ### 2.2 Motor de confianza IOFE (`SecureSign.Trust`, en Signature.Api)
