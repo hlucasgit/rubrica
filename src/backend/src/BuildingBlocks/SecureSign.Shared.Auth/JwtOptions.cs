@@ -39,30 +39,37 @@ public sealed class JwtOptions
     public string Authority { get; set; } = default!;
 
     /// <summary>
-    /// Secreto compartido que autentica la LLAMADA a
-    /// <c>POST /api/auth/interno/emitir</c> — deliberadamente de alcance
-    /// mucho más angosto que la llave HS256 que reemplaza: quien lo tiene
-    /// puede PEDIRLE al Gateway que firme un token, pero nunca puede firmar
-    /// nada por sí mismo (el material de firma nunca sale del Gateway). Ver
-    /// RUNBOOK.md 12.21, "fuera de alcance" — un secreto por servicio en vez
-    /// de uno compartido queda documentado como mejora futura.
+    /// SOLO servicios emisores (los que piden tokens al Gateway): su nombre
+    /// (p. ej. <c>securesign-signature-api</c>), enviado en
+    /// <c>X-Internal-Service</c>. El Gateway lo usa para buscar SU entrada en
+    /// <see cref="ServiciosEmisores"/> y aplicar la política de emisión de esa
+    /// identidad (ver PoliticaEmisionInterna).
+    /// </summary>
+    public string NombreServicio { get; set; } = default!;
+
+    /// <summary>
+    /// SOLO servicios emisores: el secreto PROPIO de este servicio, no
+    /// compartido con ningún otro (RUNBOOK.md 12.28). Autentica la llamada a
+    /// <c>POST /api/auth/interno/emitir</c>; quien lo tiene puede pedirle al
+    /// Gateway un token dentro de la política de su servicio, nunca firmar
+    /// nada por sí mismo ni pedir claims fuera de esa política.
     /// </summary>
     public string SecretoClienteInterno { get; set; } = default!;
 
     /// <summary>
-    /// SOLO el Gateway: secretos adicionales que <c>POST /api/auth/interno/emitir</c>
-    /// sigue aceptando además de <see cref="SecretoClienteInterno"/> — es el
-    /// mecanismo de rotación sin corte. Procedimiento (RUNBOOK.md 12.27): (1)
-    /// poner el secreto nuevo aquí y desplegar el Gateway; (2) cambiar
-    /// <see cref="SecretoClienteInterno"/> en cada servicio emisor al valor
-    /// nuevo; (3) cuando todos migraron, mover el nuevo a
-    /// <see cref="SecretoClienteInterno"/> del Gateway y vaciar esta lista.
+    /// SOLO el Gateway: catálogo de servicios autorizados a pedir tokens, con
+    /// sus secretos y permisos. Rotación sin corte de un servicio: agregar el
+    /// secreto nuevo a <see cref="ServicioEmisorOpciones.Secretos"/> junto al
+    /// viejo, cambiar <see cref="SecretoClienteInterno"/> en ese servicio, y
+    /// retirar el viejo (RUNBOOK.md 12.27/12.28).
     /// </summary>
-    public string[] SecretosClienteInternoAdicionales { get; set; } = [];
+    public List<ServicioEmisorOpciones> ServiciosEmisores { get; set; } = [];
 
-    /// <summary>Todos los secretos internos no vacíos que esta instancia acepta o usa.</summary>
+    /// <summary>Todos los secretos internos no vacíos que esta instancia usa o acepta.</summary>
     public IEnumerable<string> SecretosInternosAceptados() =>
-        new[] { SecretoClienteInterno }.Concat(SecretosClienteInternoAdicionales).Where(s => !string.IsNullOrEmpty(s));
+        new[] { SecretoClienteInterno }
+            .Concat(ServiciosEmisores.SelectMany(s => s.Secretos))
+            .Where(s => !string.IsNullOrEmpty(s));
 
     /// <summary>
     /// Directorio donde el Gateway persiste sus llaves RSA (ver RsaKeyStore)
@@ -76,4 +83,16 @@ public sealed class JwtOptions
 
     /// <summary>Vida del token de intercambio interno — deliberadamente corta (RFC 8693 recomienda tokens de vida acotada para reducir la ventana de uso indebido si se filtran).</summary>
     public int MinutosExpiracionInterno { get; set; } = 2;
+}
+
+/// <summary>Un servicio interno autorizado a pedirle tokens al Gateway.</summary>
+public sealed class ServicioEmisorOpciones
+{
+    public string Nombre { get; set; } = default!;
+
+    /// <summary>Secretos vigentes de este servicio (más de uno solo durante una rotación).</summary>
+    public string[] Secretos { get; set; } = [];
+
+    /// <summary>Solo Signature.Api: puede pedir tickets del Firmador Local (audiencia externa, scope firmar:local).</summary>
+    public bool PuedeEmitirTickets { get; set; }
 }
