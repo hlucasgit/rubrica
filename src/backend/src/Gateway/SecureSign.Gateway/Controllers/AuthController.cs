@@ -54,38 +54,44 @@ public sealed class AuthController(JwtTokenService tokenService, IOptions<Client
             System.Text.Encoding.UTF8.GetBytes(a), System.Text.Encoding.UTF8.GetBytes(b));
 
     /// <summary>
-    /// Compara contra TODOS los secretos aceptados (actual + los de rotación
-    /// en curso) sin cortocircuitar, para no filtrar por tiempo cuál coincidió.
+    /// Busca el servicio por nombre y compara el secreto contra TODOS los suyos
+    /// (el vigente y los de una rotación en curso) sin cortocircuitar, para no
+    /// filtrar por tiempo cuál coincidió. Un servicio desconocido también
+    /// recorre una comparación, para que "no existe" y "secreto malo" no se
+    /// distingan ni por respuesta ni por tiempo.
     /// </summary>
-    private bool SecretoInternoValido(string recibido)
+    private ServicioEmisorOpciones? AutenticarServicio(string? nombre, string? secretoRecibido)
     {
+        if (string.IsNullOrEmpty(nombre) || string.IsNullOrEmpty(secretoRecibido)) return null;
+
+        var servicio = jwtOpciones.Value.ServiciosEmisores.FirstOrDefault(s => s.Nombre == nombre);
         bool coincide = false;
-        foreach (var aceptado in jwtOpciones.Value.SecretosInternosAceptados())
-            coincide |= CryptographicEquals(aceptado, recibido);
-        return coincide;
+        foreach (var aceptado in servicio?.Secretos.Where(s => !string.IsNullOrEmpty(s)) ?? [string.Empty])
+            coincide |= CryptographicEquals(aceptado, secretoRecibido);
+        return coincide ? servicio : null;
     }
 
     public sealed record EmitirTokenInternoRequest(Dictionary<string, string> Claims, string Audiencia, int MinutosExpiracion);
 
     /// <summary>
-    /// Firma cualquier conjunto de claims que le pase un servicio interno
-    /// autenticado con el secreto compartido — nunca interpreta su
-    /// significado (eso lo decide el llamador: TokenExchangeService para
-    /// llamadas servicio-a-servicio, EmisorTicketFirmaLocal para tickets del
-    /// Firmador Local). No es una ruta pública del catálogo de integración —
-    /// mismo tipo de atajo deliberado que /api/interno/identidad/*, ver
-    /// README.md.
+    /// Firma los claims que le pide un servicio interno autenticado (nombre +
+    /// secreto propio) SOLO si cumplen la política de emisión de ese servicio
+    /// (ver PoliticaEmisionInterna): los dos tipos de token legítimos, claims
+    /// de una lista cerrada, <c>act</c> igual al servicio autenticado. No es
+    /// una ruta pública del catálogo de integración — mismo tipo de atajo
+    /// deliberado que /api/interno/identidad/*, ver README.md.
     /// </summary>
     [HttpPost("interno/emitir")]
     [AllowAnonymous]
     public IActionResult EmitirInterno([FromBody] EmitirTokenInternoRequest body)
     {
-        string? secretoRecibido = Request.Headers["X-Internal-Client-Secret"];
-        if (string.IsNullOrEmpty(secretoRecibido) || !SecretoInternoValido(secretoRecibido))
-            return Unauthorized(new { error = "SECRETO_INVALIDO", mensaje = "X-Internal-Client-Secret ausente o incorrecto." });
+        var servicio = AutenticarServicio(Request.Headers["X-Internal-Service"], Request.Headers["X-Internal-Client-Secret"]);
+        if (servicio is null)
+            return Unauthorized(new { error = "SECRETO_INVALIDO", mensaje = "X-Internal-Service o X-Internal-Client-Secret ausente o incorrecto." });
 
-        if (body.Claims.Count == 0 || string.IsNullOrWhiteSpace(body.Audiencia) || body.MinutosExpiracion <= 0)
-            return BadRequest(new { error = "SOLICITUD_INVALIDA", mensaje = "Se requieren claims, audiencia y minutosExpiracion (> 0)." });
+        var motivo = PoliticaEmisionInterna.Evaluar(servicio, body.Claims, body.Audiencia, body.MinutosExpiracion, jwtOpciones.Value);
+        if (motivo is not null)
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "POLITICA_DE_EMISION", mensaje = motivo });
 
         var token = tokenService.EmitirConClaims(body.Claims, body.Audiencia, body.MinutosExpiracion);
         return Ok(new { access_token = token.AccessToken, expires_in = token.ExpiresIn });

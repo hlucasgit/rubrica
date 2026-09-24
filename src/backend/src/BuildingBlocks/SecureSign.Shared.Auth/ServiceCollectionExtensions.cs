@@ -123,8 +123,10 @@ public static class ServiceCollectionExtensions
     /// TokenExchangeService y AddSecureSignInternalHttpClient. Desde
     /// RUNBOOK.md 12.21, esto es una llamada HTTP real al Gateway (ver
     /// EmisorTokenInterno), no una firma local — el HttpClient registrado
-    /// aquí lleva el secreto compartido (Jwt:SecretoClienteInterno) que
-    /// autentica esa llamada.
+    /// aquí lleva el secreto propio del servicio (Jwt:SecretoClienteInterno) y
+    /// su nombre (Jwt:NombreServicio, header X-Internal-Service), contra los
+    /// que el Gateway autentica la llamada y aplica la política de emisión de
+    /// ese servicio (ver PoliticaEmisionInterna).
     /// </summary>
     public static IServiceCollection AddSecureSignTokenExchange(this IServiceCollection services, IConfiguration configuration)
     {
@@ -132,12 +134,13 @@ public static class ServiceCollectionExtensions
         var opciones = configuration.GetSection(JwtOptions.SeccionConfiguracion).Get<JwtOptions>()
             ?? throw new InvalidOperationException("Falta la sección de configuración 'Jwt'.");
 
-        if (string.IsNullOrWhiteSpace(opciones.Authority) || string.IsNullOrWhiteSpace(opciones.SecretoClienteInterno))
-            throw new InvalidOperationException("Jwt:Authority y Jwt:SecretoClienteInterno son obligatorios para pedir tokens internos al Gateway.");
+        if (string.IsNullOrWhiteSpace(opciones.Authority) || string.IsNullOrWhiteSpace(opciones.SecretoClienteInterno) || string.IsNullOrWhiteSpace(opciones.NombreServicio))
+            throw new InvalidOperationException("Jwt:Authority, Jwt:NombreServicio y Jwt:SecretoClienteInterno son obligatorios para pedir tokens internos al Gateway.");
 
         services.AddHttpClient<EmisorTokenInterno>(client =>
         {
             client.BaseAddress = new Uri(opciones.Authority);
+            client.DefaultRequestHeaders.Add("X-Internal-Service", opciones.NombreServicio);
             client.DefaultRequestHeaders.Add("X-Internal-Client-Secret", opciones.SecretoClienteInterno);
         });
         services.AddSingleton<TokenExchangeService>();
