@@ -3,6 +3,9 @@ using SecureSign.Shared.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Secretos entregados como archivos (Docker/Kubernetes secrets) — precedencia máxima, ver RUNBOOK.md 12.30.
+builder.Configuration.AddSecureSignSecretosDeArchivo();
+
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 

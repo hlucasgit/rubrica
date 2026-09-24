@@ -3,6 +3,19 @@
 # (ver docs/07-seguridad/modelo-seguridad.md) — en este compose,
 # SecureSign.Crypto.Api usa el proveedor de software solo para desarrollo.
 #
+# Secretos como archivos (producción / Docker Swarm / Kubernetes): cada Api lee
+# /run/secrets/<clave con __ en vez de :> al arrancar y tiene precedencia sobre
+# appsettings y variables de entorno (SecretosDeArchivo, RUNBOOK.md 12.30). Con
+# Compose se declara así (ejemplo; en desarrollo no hace falta):
+#
+#   secrets:
+#     jwt_gateway_signature: { file: ./secretos/signature.txt }
+#   services:
+#     gateway:
+#       secrets:
+#         - source: jwt_gateway_signature
+#           target: Jwt__ServiciosEmisores__0__Secretos__0
+#
 # Las migraciones de EF Core NO las aplica cada Api al arrancar (ver
 # src/Migrator) — cada servicio con estado tiene un job "*-migrate" que
 # corre una sola vez, aplica su esquema, y termina; el Api correspondiente

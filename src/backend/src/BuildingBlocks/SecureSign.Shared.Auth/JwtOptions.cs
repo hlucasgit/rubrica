@@ -65,12 +65,6 @@ public sealed class JwtOptions
     /// </summary>
     public List<ServicioEmisorOpciones> ServiciosEmisores { get; set; } = [];
 
-    /// <summary>Todos los secretos internos no vacíos que esta instancia usa o acepta.</summary>
-    public IEnumerable<string> SecretosInternosAceptados() =>
-        new[] { SecretoClienteInterno }
-            .Concat(ServiciosEmisores.SelectMany(s => s.Secretos))
-            .Where(s => !string.IsNullOrEmpty(s));
-
     /// <summary>
     /// Directorio donde el Gateway persiste sus llaves RSA (ver RsaKeyStore)
     /// — SOLO lo usa el Gateway. Deliberadamente fuera del repositorio y
