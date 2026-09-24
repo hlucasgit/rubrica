@@ -12,6 +12,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddSecureSignJwtIssuer(builder.Configuration);
 builder.Services.AddSecureSignJwtValidation(builder.Configuration);
+builder.Services.AddLimitacionDeTasaGateway(builder.Configuration);
 builder.Services.Configure<ClientesDemoOptions>(builder.Configuration.GetSection(ClientesDemoOptions.SeccionConfiguracion));
 
 // Cada ruta proxied declara explícitamente su política en appsettings.json
@@ -52,6 +53,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("visor-firma-desarrollo");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
