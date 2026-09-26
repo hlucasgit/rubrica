@@ -22,8 +22,15 @@ public sealed class ValidadorCertificados(
     VerificadorRevocacionCrl verificadorCrl,
     VerificadorRevocacionOcsp verificadorOcsp)
 {
+    /// <param name="embebido">
+    /// Si se pasa, la validación se hace SIN RED con ese material (PAdES-LT, RUNBOOK.md 12.33): los intermedios
+    /// salen de él en vez de descargarse por AIA y la revocación se comprueba contra sus CRL/OCSP evaluadas en
+    /// <paramref name="instante"/>. La cadena y la TSL siguen exigiéndose completas contra las raíces
+    /// configuradas — el material embebido no es confiable por sí mismo.
+    /// </param>
     public async Task<ResultadoValidacionCertificado> ValidarAsync(
-        X509Certificate2 certificado, DateTimeOffset instante, CancellationToken ct = default)
+        X509Certificate2 certificado, DateTimeOffset instante, CancellationToken ct = default,
+        MaterialRevocacionEmbebido? embebido = null)
     {
         var evidencia = new List<string>();
 
@@ -34,7 +41,9 @@ public sealed class ValidadorCertificados(
 
         bool propositoValido = TienePropositoDeFirma(certificado, evidencia);
 
-        var intermedios = await descargadorIntermedios.DescargarCadenaAsync(certificado, ct: ct);
+        IReadOnlyList<X509Certificate2> intermedios = embebido is not null
+            ? embebido.CertificadosDer.Select(der => new X509Certificate2(der)).ToList()
+            : await descargadorIntermedios.DescargarCadenaAsync(certificado, ct: ct);
         var chain = new X509Chain();
         chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         foreach (var raiz in raices.Raices) chain.ChainPolicy.CustomTrustStore.Add(raiz);
@@ -60,10 +69,26 @@ public sealed class ValidadorCertificados(
         // la cadena se cerró usando ExtraStore/CustomTrustStore en vez de la descarga).
         X509Certificate2? emisorDirecto = chain.ChainElements.Count > 1 ? chain.ChainElements[1].Certificate : null;
 
-        var (estadoOcsp, detalleOcsp, ocspDer) = emisorDirecto is not null
-            ? await verificadorOcsp.VerificarAsync(certificado, emisorDirecto, ct)
-            : (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para consultar OCSP.", null);
-        var (estadoCrl, detalleCrl, crlDer) = await verificadorCrl.VerificarAsync(certificado, emisorDirecto, ct);
+        EstadoRevocacion estadoOcsp, estadoCrl;
+        string detalleOcsp, detalleCrl;
+        byte[]? ocspDer, crlDer;
+        if (embebido is not null)
+        {
+            evidencia.Add("Validación con el material embebido en el documento (PAdES-LT), sin consultar la red.");
+            (estadoOcsp, detalleOcsp) = emisorDirecto is not null
+                ? VerificadorRevocacionOcsp.VerificarEmbebida(certificado, emisorDirecto, embebido.OcspsDer, instante)
+                : (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para verificar el OCSP embebido.");
+            (estadoCrl, detalleCrl) = VerificadorRevocacionCrl.VerificarEmbebida(certificado, emisorDirecto, embebido.CrlsDer, instante);
+            ocspDer = null;
+            crlDer = null;
+        }
+        else
+        {
+            (estadoOcsp, detalleOcsp, ocspDer) = emisorDirecto is not null
+                ? await verificadorOcsp.VerificarAsync(certificado, emisorDirecto, ct)
+                : (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para consultar OCSP.", null);
+            (estadoCrl, detalleCrl, crlDer) = await verificadorCrl.VerificarAsync(certificado, emisorDirecto, ct);
+        }
         evidencia.Add($"OCSP: {estadoOcsp} — {detalleOcsp}");
         evidencia.Add($"CRL: {estadoCrl} — {detalleCrl}");
 

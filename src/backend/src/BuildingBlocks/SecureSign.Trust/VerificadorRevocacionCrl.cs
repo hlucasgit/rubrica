@@ -54,6 +54,52 @@ public sealed class VerificadorRevocacionCrl(HttpClient http)
         return (EstadoRevocacion.Unavailable, $"No se pudo descargar ninguna CRL de los {urls.Count} punto(s) de distribución declarados.", null);
     }
 
+    /// <summary>
+    /// Igual que <see cref="VerificarAsync"/> pero contra CRLs que ya vienen EMBEBIDAS en el documento
+    /// (PAdES-LT), sin red y evaluando la vigencia de la CRL en <paramref name="instante"/> (el de la firma)
+    /// en vez de "ahora": una CRL embebida hace años ya venció, pero era vigente cuando se firmó, que es lo
+    /// que importa. La firma de cada CRL se verifica contra el emisor del certificado exactamente como en
+    /// la descarga — una CRL embebida por un atacante no se acepta. Simplificación documentada: no se exige
+    /// la regla estricta de ETSI EN 319 102-1 de que la CRL sea POSTERIOR a la firma, solo que no hubiera
+    /// vencido antes de ella.
+    /// </summary>
+    public static (EstadoRevocacion Estado, string Detalle) VerificarEmbebida(
+        X509Certificate2 certificado, X509Certificate2? emisor, IEnumerable<byte[]> crlsDer, DateTimeOffset instante)
+    {
+        if (emisor is null)
+            return (EstadoRevocacion.Unavailable, "No se pudo determinar el certificado emisor para verificar la firma de la CRL embebida.");
+
+        var emisorBc = new X509CertificateParser().ReadCertificate(emisor.RawData);
+        string serial = NormalizarSerial(certificado.SerialNumber);
+        int descartadas = 0;
+
+        foreach (var der in crlsDer)
+        {
+            try
+            {
+                var crl = new X509CrlParser().ReadCrl(der);
+                if (crl is null || !crl.IsSignatureValid(emisorBc.GetPublicKey()) || !crl.IssuerDN.Equivalent(emisorBc.SubjectDN))
+                {
+                    descartadas++;
+                    continue;
+                }
+                if (crl.NextUpdate?.ToUniversalTime() is { } siguiente && siguiente < instante.UtcDateTime)
+                {
+                    descartadas++; // ya había vencido ANTES de la firma: no prueba nada sobre ese instante.
+                    continue;
+                }
+
+                bool revocado = crl.GetRevokedCertificates()?.Any(r => NormalizarSerial(r.SerialNumber.ToString(16)) == serial) == true;
+                return revocado
+                    ? (EstadoRevocacion.Revoked, $"El número de serie {serial} figura en la CRL embebida de {crl.IssuerDN}.")
+                    : (EstadoRevocacion.Good, $"No revocado según la CRL embebida de {crl.IssuerDN} (emitida {crl.ThisUpdate:o}, firma verificada contra el emisor).");
+            }
+            catch { descartadas++; }
+        }
+
+        return (EstadoRevocacion.Unavailable, $"Ninguna de las {descartadas} CRL embebida(s) es utilizable (firma inválida, otro emisor o vencida antes de la firma).");
+    }
+
     private Task<CrlCacheada?> ObtenerOCachearAsync(string url, X509Certificate2 emisor, CancellationToken ct) =>
         _cache.AddOrUpdate(
             url,
