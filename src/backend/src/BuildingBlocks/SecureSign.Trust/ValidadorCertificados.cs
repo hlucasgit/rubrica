@@ -20,7 +20,8 @@ public sealed class ValidadorCertificados(
     ListaConfianzaIofe listaIofe,
     DescargadorCertificadosIntermedios descargadorIntermedios,
     VerificadorRevocacionCrl verificadorCrl,
-    VerificadorRevocacionOcsp verificadorOcsp)
+    VerificadorRevocacionOcsp verificadorOcsp,
+    OpcionesPoliticaCertificado? politicaCertificado = null)
 {
     /// <param name="embebido">
     /// Si se pasa, la validación se hace SIN RED con ese material (PAdES-LT, RUNBOOK.md 12.33): los intermedios
@@ -40,6 +41,28 @@ public sealed class ValidadorCertificados(
             : $"NO vigente en {instante:o} (vigencia declarada: {certificado.NotBefore:o} a {certificado.NotAfter:o}).");
 
         bool propositoValido = TienePropositoDeFirma(certificado, evidencia);
+
+        // EKU y CertificatePolicies (RUNBOOK.md 12.34): SIEMPRE se leen y se reportan; solo rechazan si la
+        // política configurada lo exige (Exigir) — por defecto es informativa.
+        var politica = AnalizadorPoliticaCertificado.Analizar(certificado, politicaCertificado);
+        evidencia.Add($"ExtendedKeyUsage: {(politica.ExtendedKeyUsages.Count == 0 ? "(no declarado)" : string.Join(", ", politica.ExtendedKeyUsages))}.");
+        evidencia.Add($"CertificatePolicies: {(politica.PoliticasCertificado.Count == 0 ? "(no declarado)" : string.Join(", ", politica.PoliticasCertificado))}.");
+        switch (politica.Estado)
+        {
+            case EstadoPolitica.SoloInformativa:
+                evidencia.Add("Política de EKU/CertificatePolicies: solo informativa (no hay OID permitidos configurados) — no afecta el veredicto.");
+                break;
+            case EstadoPolitica.Cumple:
+                evidencia.Add("Política de EKU/CertificatePolicies: el certificado cumple los OID permitidos configurados.");
+                break;
+            case EstadoPolitica.NoCumple when politicaCertificado is { Exigir: true }:
+                evidencia.Add("Política de EKU/CertificatePolicies: el certificado NO cumple los OID permitidos configurados y la política es EXIGIDA — propósito inválido.");
+                propositoValido = false;
+                break;
+            case EstadoPolitica.NoCumple:
+                evidencia.Add("Política de EKU/CertificatePolicies: el certificado NO cumple los OID permitidos configurados, pero la política es solo informativa — no afecta el veredicto.");
+                break;
+        }
 
         IReadOnlyList<X509Certificate2> intermedios = embebido is not null
             ? embebido.CertificadosDer.Select(der => new X509Certificate2(der)).ToList()
@@ -112,7 +135,8 @@ public sealed class ValidadorCertificados(
             InstanteValidacion: instante,
             Evidencia: evidencia,
             Error: null,
-            MaterialLargoPlazo: materialLargoPlazo);
+            MaterialLargoPlazo: materialLargoPlazo,
+            Politica: politica);
     }
 
     /// <summary>

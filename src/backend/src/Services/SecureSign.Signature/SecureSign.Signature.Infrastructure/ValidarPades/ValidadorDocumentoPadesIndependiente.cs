@@ -1,4 +1,5 @@
 using SecureSign.Signature.Application.ValidarPades;
+using SecureSign.Trust;
 using SecureSign.Validator;
 
 namespace SecureSign.Signature.Infrastructure.ValidarPades;
@@ -39,6 +40,9 @@ public sealed class ValidadorDocumentoPadesIndependiente(ValidadorDocumentoPades
             EstadoRevocacionCombinado: vc?.Revocacion.Combinado.ToString() ?? "Unavailable",
             EstadoFinal: f.EstadoFinal,
             Evidencia: f.Evidencia,
-            Error: f.Error);
+            Error: f.Error,
+            ExtendedKeyUsages: vc?.Politica?.ExtendedKeyUsages ?? [],
+            PoliticasCertificado: vc?.Politica?.PoliticasCertificado ?? [],
+            EstadoPolitica: (vc?.Politica?.Estado ?? EstadoPolitica.SoloInformativa).ToString());
     }
 }
