@@ -88,6 +88,10 @@ public sealed class AuthController(JwtTokenService tokenService, IOptions<Client
     [AllowAnonymous]
     public IActionResult EmitirInterno([FromBody] EmitirTokenInternoRequest body)
     {
+        // Solo en el listener interno (Jwt:PuertoInterno): en el puerto público este endpoint "no existe".
+        if (jwtOpciones.Value.PuertoInterno is { } puertoInterno && HttpContext.Connection.LocalPort != puertoInterno)
+            return NotFound();
+
         var servicio = AutenticarServicio(Request.Headers["X-Internal-Service"], Request.Headers["X-Internal-Client-Secret"]);
         if (servicio is null)
             return Unauthorized(new { error = "SECRETO_INVALIDO", mensaje = "X-Internal-Service o X-Internal-Client-Secret ausente o incorrecto." });

@@ -266,13 +266,54 @@ public sealed class SecretoInternoTests : IDisposable
     public void Fuera_de_desarrollo_revisa_los_secretos_de_cada_servicio_emisor()
     {
         var opciones = Opciones();
+        opciones.PuertoInterno = 8081;
         opciones.ServiciosEmisores[1].Secretos = [SecretoDev];
         Assert.Single(ValidadorOpcionesJwt.Validar(opciones, esDesarrollo: false));
     }
 
     [Fact]
-    public void Fuera_de_desarrollo_acepta_secretos_largos_reales() =>
-        Assert.Empty(ValidadorOpcionesJwt.Validar(Opciones(SecretoNuevo), esDesarrollo: false));
+    public void Fuera_de_desarrollo_acepta_secretos_largos_reales()
+    {
+        var opciones = Opciones(SecretoNuevo);
+        opciones.PuertoInterno = 8081;
+        Assert.Empty(ValidadorOpcionesJwt.Validar(opciones, esDesarrollo: false));
+    }
+
+    [Fact]
+    public void Fuera_de_desarrollo_exige_el_puerto_interno_si_hay_servicios_emisores() =>
+        Assert.Contains("PuertoInterno", Assert.Single(ValidadorOpcionesJwt.Validar(Opciones(), esDesarrollo: false)));
+
+    [Fact]
+    public void En_desarrollo_el_puerto_interno_es_opcional() =>
+        Assert.Empty(ValidadorOpcionesJwt.Validar(Opciones(), esDesarrollo: true));
+
+    // --- Listener interno ---
+
+    private AuthController EnPuerto(int puertoLocal, int? puertoInterno)
+    {
+        var opciones = Opciones();
+        opciones.PuertoInterno = puertoInterno;
+        var controlador = Construir(opciones);
+        controlador.HttpContext.Connection.LocalPort = puertoLocal;
+        return controlador;
+    }
+
+    [Fact]
+    public void En_el_puerto_publico_el_endpoint_interno_no_existe() =>
+        Assert.IsType<NotFoundResult>(Emitir(EnPuerto(puertoLocal: 8080, puertoInterno: 8081), Signature, SecretoSignature, ClaimsIntercambio(Signature)));
+
+    [Fact]
+    public void En_el_puerto_interno_el_endpoint_funciona() =>
+        Assert.IsType<OkObjectResult>(Emitir(EnPuerto(puertoLocal: 8081, puertoInterno: 8081), Signature, SecretoSignature, ClaimsIntercambio(Signature)));
+
+    [Fact]
+    public void En_el_puerto_publico_ni_siquiera_un_secreto_correcto_revela_nada() =>
+        // 404 y no 401/403: desde fuera no se distingue "endpoint inexistente" de "secreto malo".
+        Assert.IsType<NotFoundResult>(Emitir(EnPuerto(puertoLocal: 8080, puertoInterno: 8081), Signature, "secreto-incorrecto", ClaimsIntercambio(Signature)));
+
+    [Fact]
+    public void Sin_puerto_interno_configurado_no_se_restringe_el_puerto() =>
+        Assert.IsType<OkObjectResult>(Emitir(EnPuerto(puertoLocal: 8080, puertoInterno: null), Signature, SecretoSignature, ClaimsIntercambio(Signature)));
 
     [Fact]
     public void Servicio_sin_secreto_configurado_no_falla_la_validacion() =>

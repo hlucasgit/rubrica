@@ -36,6 +36,10 @@ services:
       # en un .env junto a este archivo — el Gateway y el servicio deben ver
       # el mismo valor.
       ASPNETCORE_ENVIRONMENT: "Development"
+      # Listener interno: POST /api/auth/interno/emitir SOLO responde en 8081, que
+      # NO se publica al host (ports: solo 8080) — RUNBOOK.md 12.32.
+      ASPNETCORE_HTTP_PORTS: "8080;8081"
+      Jwt__PuertoInterno: "8081"
       Jwt__ServiciosEmisores__0__Secretos__0: "${SECRETO_INTERNO_SIGNATURE:-dev-only-secret-signature-api-do-not-use-in-production}"
       Jwt__ServiciosEmisores__1__Secretos__0: "${SECRETO_INTERNO_DOCUMENTS:-dev-only-secret-documents-api-do-not-use-in-production}"
     volumes:
@@ -133,6 +137,7 @@ services:
       # en un .env junto a este archivo — el Gateway y el servicio deben ver
       # el mismo valor.
       ASPNETCORE_ENVIRONMENT: "Development"
+      Jwt__AuthorityInterna: "http://gateway:8081"
       Jwt__SecretoClienteInterno: "${SECRETO_INTERNO_DOCUMENTS:-dev-only-secret-documents-api-do-not-use-in-production}"
     volumes:
       # AlmacenamientoDocumentalLocal (solo para desarrollo, ver su propio
@@ -159,6 +164,7 @@ services:
       # en un .env junto a este archivo — el Gateway y el servicio deben ver
       # el mismo valor.
       ASPNETCORE_ENVIRONMENT: "Development"
+      Jwt__AuthorityInterna: "http://gateway:8081"
       Jwt__SecretoClienteInterno: "${SECRETO_INTERNO_SIGNATURE:-dev-only-secret-signature-api-do-not-use-in-production}"
       # Por defecto apunta al Crypto.Api en Docker (proveedor de software).
       # Para firmar con un token PKCS#11 real (DNIe u otro), corre

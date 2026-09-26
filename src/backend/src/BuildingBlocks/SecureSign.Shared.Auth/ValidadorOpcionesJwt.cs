@@ -27,6 +27,9 @@ public sealed class ValidadorOpcionesJwt(IHostEnvironment entorno) : IValidateOp
         var errores = new List<string>();
         if (esDesarrollo) return errores;
 
+        if (opciones.ServiciosEmisores.Count > 0 && opciones.PuertoInterno is null)
+            errores.Add("Jwt:PuertoInterno es obligatorio fuera de Development: sin él, POST /api/auth/interno/emitir queda expuesto en el mismo puerto público del Gateway.");
+
         var secretos = new List<(string Origen, string Valor)> { ("Jwt:SecretoClienteInterno", opciones.SecretoClienteInterno) };
         foreach (var servicio in opciones.ServiciosEmisores)
             secretos.AddRange(servicio.Secretos.Select(s => ($"Jwt:ServiciosEmisores['{servicio.Nombre}']", s)));
