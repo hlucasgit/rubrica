@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Instalador MSI del Firmador Local (WiX 5.0.x, licencia MS-RL). Ver RUNBOOK.md 12.35.
+
+  Por USUARIO (no exige administrador): el Firmador Local solo usa HKCU (protocolo securesign://, inicio
+  automático) y escucha en 127.0.0.1, así que no hay razón para pedir elevación — y un instalador que pide
+  administrador sin necesitarlo es una mala señal para el usuario y para una auditoría.
+
+  Propiedades públicas (msiexec /i ... PROPIEDAD=valor):
+    INICIAR_CON_WINDOWS=0   no registrar el inicio automático (por defecto 1: queda corriendo en la bandeja).
+
+  Se construye con Construir-Instalador.ps1 (variables -d PublishDir, -d Version).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="SecureSign Firmador Local"
+      Manufacturer="SecureSign Perú"
+      Version="$(Version)"
+      UpgradeCode="33C48550-8D5D-4972-A8BC-62C307489897"
+      Scope="perUser"
+      Language="1033"
+      Compressed="yes">
+
+    <SummaryInformation Description="Firmador Local de SecureSign Perú: firma documentos con el DNIe u otro token, con el PIN siempre en la máquina del firmante." />
+
+    <MajorUpgrade DowngradeErrorMessage="Ya hay instalada una versión más reciente del Firmador Local." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="INICIAR_CON_WINDOWS" Value="1" />
+    <Property Id="ARPCOMMENTS" Value="Servicio local de firma digital (127.0.0.1). El PIN nunca sale de este equipo." />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramasUsuario" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="SecureSign Firmador Local" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="MenuInicioFolder" Name="SecureSign" />
+    </StandardDirectory>
+
+    <!-- El ejecutable, con Id estable: lo referencian el acceso directo y los valores del registro. -->
+    <Component Id="EjecutablePrincipal" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="SecureSignFirmadorLocalExe" Source="$(PublishDir)\SecureSignFirmadorLocal.exe" KeyPath="yes" />
+    </Component>
+
+    <!-- Todo lo demás publicado (runtime autocontenido, dependencias). -->
+    <Files Include="$(PublishDir)\**">
+      <Exclude Files="$(PublishDir)\SecureSignFirmadorLocal.exe" />
+      <Exclude Files="$(PublishDir)\**\*.pdb" />
+    </Files>
+
+    <!-- Protocolo securesign:// (modo heredado) — mismos valores que escribe `SecureSignFirmadorLocal.exe` con el argumento registrar. -->
+    <Component Id="ProtocoloSecureSign" Directory="INSTALLFOLDER" Guid="*">
+      <RegistryKey Root="HKCU" Key="Software\Classes\securesign">
+        <RegistryValue Type="string" Value="URL:Protocolo de firma SecureSign Perú" KeyPath="yes" />
+        <RegistryValue Name="URL Protocol" Type="string" Value="" />
+        <RegistryKey Key="DefaultIcon">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]SecureSignFirmadorLocal.exe&quot;,0" />
+        </RegistryKey>
+        <RegistryKey Key="shell\open\command">
+          <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]SecureSignFirmadorLocal.exe&quot; &quot;%1&quot;" />
+        </RegistryKey>
+      </RegistryKey>
+    </Component>
+
+    <!-- Inicio automático en la bandeja del sistema (desactivable con INICIAR_CON_WINDOWS=0). -->
+    <Component Id="InicioAutomatico" Directory="INSTALLFOLDER" Guid="*" Condition="INICIAR_CON_WINDOWS = &quot;1&quot;">
+      <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="SecureSignFirmadorLocal"
+                     Type="string" Value="&quot;[INSTALLFOLDER]SecureSignFirmadorLocal.exe&quot;" KeyPath="yes" />
+    </Component>
+
+    <Component Id="AccesoDirectoMenuInicio" Directory="MenuInicioFolder" Guid="*">
+      <Shortcut Id="AccesoDirectoFirmador" Name="SecureSign Firmador Local" Target="[INSTALLFOLDER]SecureSignFirmadorLocal.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="QuitarMenuInicio" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\SecureSign\FirmadorLocal" Name="AccesoDirecto" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+
+  </Package>
+</Wix>

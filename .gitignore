@@ -27,3 +27,4 @@ src/backend/contrato_dnie_firmado_descargado.txt
 
 ## Overrides locales de docker-compose (pueden apuntar a hardware/rutas de esta máquina)
 src/backend/.env
+artifacts/

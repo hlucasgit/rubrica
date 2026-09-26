@@ -15,14 +15,14 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | P0-03 | El flujo no debe degradar en silencio PAdES → firma desacoplada | 🟢 | `FirmadorLocal/Program.cs` (`Preparar`/`Inyectar` fuera de un `catch` que ignore el error) — fail closed, aborta sin firmar si el PAdES falla |
 | P0-04 | Pipeline de `main` roto (NETSDK1100, WinForms en runner Linux) | 🟢 | `.github/workflows/ci.yml` — jobs separados `backend-build-test-migrate` (Ubuntu) / `firmador-local-build` (Windows). `main` verde de forma sostenida (ver historial de runs) |
 | P0-05 | Validador independiente que no dependa del código que genera la firma | 🟢 | `SecureSign.Validator` + `POST /api/validador/pdf`. RUNBOOK 12.12 — compone `PdfSignatureVerifier` + `SecureSign.Trust` sin referenciar `PdfSignaturePlaceholder`. Visor independiente ("Rúbrica Validador") en `src/frontend/validador-web`, RUNBOOK 12.20 |
-| P0-06 | Autenticidad e integridad del software distribuido (firma de código, instalador, SHA-256) | 🟡 | RUNBOOK 12.18 — SBOM y manifiesto SHA-256 por commit ya en CI (`release-manifest-firmador`). **Falta la firma Authenticode del ejecutable/instalador**: requiere comprar un certificado de firma de código (trámite de identidad jurídica, no tarea de código) |
+| P0-06 | Autenticidad e integridad del software distribuido (firma de código, instalador, SHA-256) | 🟡 | RUNBOOK 12.18 — SBOM y manifiesto SHA-256 por commit ya en CI (`release-manifest-firmador`). **Falta la firma Authenticode real**: requiere comprar un certificado de firma de código (trámite de identidad jurídica, no tarea de código). Desde RUNBOOK 12.35 existen el instalador MSI por usuario, el pipeline de firma con verificación (probado con un certificado de prueba y sello de tiempo real) y el job de CI que lo prueba e instala; se activan solos al cargar el secreto `CODESIGN_PFX_BASE64` |
 
 ## 2. Hallazgos P1 (informe, sección 8)
 
 | Hallazgo | Estado | Evidencia |
 |---|---|---|
 | Firmador Local: CORS abierto + parámetros libres (`gatewayUrl`, `accessToken`) desde el navegador | 🟢 | RUNBOOK 12.13 — ticket de firma de un solo uso (2 min), ligado a solicitud/flujo/documento/hash/origen; `Access-Control-Allow-Origin: *` se mantiene mecánicamente, pero la verificación de origen real ocurre contra el ticket, no contra CORS |
-| Certificado: no basta encontrar "FIR" — falta verificar vigencia/KeyUsage/EKU/CertificatePolicies | 🟡 | `ValidadorCertificados.TienePropositoDeFirma` verifica BasicConstraints + KeyUsage (calibrado contra un DNIe real, RUNBOOK 12.9). **No verifica ExtendedKeyUsage ni CertificatePolicies/OID** — deliberadamente, porque el DNIe real de prueba declara un EKU ("Secure Email") que no es específico de firma de documentos y no existe todavía una referencia confiable del OID de política IOFE para no arriesgar falsos rechazos |
+| Certificado: no basta encontrar "FIR" — falta verificar vigencia/KeyUsage/EKU/CertificatePolicies | 🟡 | `ValidadorCertificados.TienePropositoDeFirma` verifica BasicConstraints + KeyUsage (calibrado contra un DNIe real, RUNBOOK 12.9). **No EXIGE ExtendedKeyUsage ni CertificatePolicies/OID** — deliberadamente, porque el DNIe real de prueba declara un EKU ("Secure Email") que no es específico de firma de documentos y no existe todavía una referencia confiable del OID de política IOFE para no arriesgar falsos rechazos. Desde RUNBOOK 12.34 SIEMPRE los lee y los reporta (evidencia, validador y auditoría de rechazos) y exigirlos es solo configuración (`PoliticaCertificado`: OID permitidos + `Exigir`), probado de punta a punta; queda apagado hasta tener la lista oficial de OID |
 | TSA RFC 3161 solo como interfaz, sin implementación real | 🟢 | `SecureSign.Tsa`. RUNBOOK 12.14 — cliente real probado contra 3 TSA públicas (DigiCert, Sectigo, FreeTSA); PAdES-T de punta a punta verificado |
 | Auditoría: `SecureSign.Audit` prácticamente vacío; evidencia/auditoría/validación criptográfica sin separar | 🟢 | `SecureSign.Audit` (7º servicio). RUNBOOK 12.16 — separación explícita de los tres conceptos, dos consumidores reales conectados (`CertificadoRechazadoPorConfianza`, `ValidacionPadesIndependiente`, `TicketFirmaLocalRechazado`) |
 | JWT HS256 con llave de desarrollo compartida | 🟡 | Migrado a RS256, llave privada solo en el Gateway (`RsaKeyStore`, nunca en `appsettings.json`), publicada como JWKS — RUNBOOK 12.21. Ningún servicio downstream vuelve a poder forjar el token de otro. Sigue faltando IdP externo real (Keycloak/Duende) y Authorization Code/PKCE para usuarios humanos — deliberadamente fuera de alcance, documentado en la propia sección 12.21 |
@@ -43,15 +43,15 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Validación OCSP | 🔴 | 🟢 (con verificación de firma) | RUNBOOK 12.9/12.17 |
 | Cadena de certificación | 🔴 | 🟢 | `ValidadorCertificados` (X509Chain, CustomRootTrust) |
 | Confianza IOFE / TSL | 🔴 | 🟢 (contenido); 🟡 (firma de la TSL) | `ListaConfianzaIofe` contra TSL real de INDECOPI. Verificación de la firma XAdES de la TSL lista y probada (RUNBOOK 12.22) pero no activada — la TSL real de INDECOPI no verifica contra su propio certificado embebido, hallazgo del dato oficial |
-| Propósito/KeyUsage/EKU/política | 🟡 | 🟡 sin cambios | Ver fila P1 arriba — EKU/CertificatePolicies siguen sin verificarse |
+| Propósito/KeyUsage/EKU/política | 🟡 | 🟡 | Ver fila P1 arriba — EKU/CertificatePolicies se leen y reportan siempre; la exigencia está implementada y configurable pero apagada (falta la lista oficial de OID de política IOFE) |
 | TSA RFC 3161 | 🔴 (solo interfaz) | 🟢 | `SecureSign.Tsa` |
 | PAdES-T/LT/LTA | 🔴 | 🟢 | PAdES-T real (RUNBOOK 12.14); PAdES-LT (RUNBOOK 12.24, DSS/VRI, 5 pruebas, incluye multifirma); PAdES-LTA (RUNBOOK 12.25, sello de archivo sobre firma+DSS, 6 pruebas). Ninguno verificado en vivo con DNIe/PKCS11 real por falta de ese escenario en Docker. Desde RUNBOOK 12.33 hay una prueba de punta a punta con las piezas reales (handler, cadena, TSL, CRL/OCSP, LT, LTA, validador independiente; solo la llave es de software) y el validador AHORA USA el DSS embebido para validar sin red — hasta entonces LT se escribía pero nunca se leía |
 | Visor/validador integral | 🟡 | 🟢 | `POST /api/validador/pdf` produce expediente completo; visor ("Rúbrica Validador") ya existe en `src/frontend/validador-web`, RUNBOOK.md 12.20, verificado en vivo de punta a punta |
 | Registro de validaciones | 🟡 | 🟢 | `SecureSign.Audit` registra `ValidacionPadesIndependiente` por cada validación |
 | Auditoría formal | 🟡 (Audit vacío) | 🟢 | `SecureSign.Audit` completo |
 | Seguridad del Firmador Local | 🟡 (requiere hardening) | 🟢 | RUNBOOK 12.13 |
-| Firma digital del ejecutable | 🔴 | 🔴 sin cambios | Bloqueado por procura (P0-06) |
-| Distribución/instalador firmado | 🔴 | 🔴 sin cambios | Idem |
+| Firma digital del ejecutable | 🔴 | 🔴 (pipeline listo) | Pipeline de firma listo y probado (RUNBOOK 12.35); bloqueado solo por el certificado (procura, P0-06) |
+| Distribución/instalador firmado | 🔴 | 🟡 | Instalador MSI construido y probado (por usuario, sin administrador, instalar/desinstalar limpio); falta firmarlo con el certificado real (RUNBOOK 12.35). El registro del protocolo `securesign://` por el MSI queda por verificar en el runner limpio de CI |
 | Endurecimiento HTTP del borde público (revisión propia previa al pentest) | — | 🟢 | Gateway: `Cache-Control: no-store` en respuestas (RFC 6749 §5.1, faltaba en el endpoint de token), `nosniff`, anti-framing, CSP, HSTS; CORS cerrado por defecto fuera de Development (antes `AllowAnyOrigin` permanente). RUNBOOK 12.31. El endpoint que acuña tokens (`interno/emitir`) ya no responde en el puerto público del Gateway, solo en un listener interno (RUNBOOK 12.32). `dotnet list package --vulnerable` sin hallazgos (directos ni transitivos) en los 34 proyectos de la solución |
 | JWT de producción | 🔴 | 🟡 | RS256 real, llave privada solo en el Gateway (RUNBOOK 12.21) — sigue sin ser un IdP acreditado (sin Authorization Code/PKCE, sin Keycloak/Duende externo) |
 | Secretos productivos | 🔴 | 🟡 | La llave de firma JWT ya está externalizada (`RsaKeyStore`, fuera de `appsettings.json`, RUNBOOK 12.21). `client_secret` de integradores demo ahora se guarda como hash Argon2id, nunca en texto plano (RUNBOOK 12.23). `Jwt:SecretoClienteInterno` ahora tiene rotación sin corte (lista de secretos aceptados en el Gateway) y el servicio se niega a arrancar fuera de Development con un secreto `dev-only-` o menor a 32 caracteres (RUNBOOK 12.27); el valor productivo lo entrega el operador por variable de entorno. Un secreto propio por servicio emisor y política de emisión en el Gateway (solo los dos tipos de token legítimos, claims de lista cerrada; un servicio comprometido ya no puede forjar un token externo ni hacerse pasar por otro), RUNBOOK 12.28. Además, limitación de tasa (429 + Retry-After) en `POST /api/auth/token` e `interno/emitir` contra adivinación de secretos y agotamiento por Argon2id, RUNBOOK 12.29. Los secretos pueden entregarse como archivos (Docker/Kubernetes secrets, precedencia máxima, verificado en un contenedor Gateway en Production), RUNBOOK 12.30. Sigue pendiente: un vault real con rotación y auditoría de acceso, endpoint de gestión de `client_secret`, y bloqueo por `client_id`/estado compartido entre réplicas del Gateway |
@@ -67,7 +67,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | `main` verde | Sí | 🟢 |
 | Build reproducible | Sí | 🟢 (build limpio documentado en cada fase, RUNBOOK) |
 | Firmador firmado digitalmente | Sí | 🔴 bloqueado por procura |
-| Instalador firmado | Sí | 🔴 bloqueado por procura (no existe instalador todavía, solo el `.exe`) |
+| Instalador firmado | Sí | 🔴 el instalador MSI existe y se prueba en CI (RUNBOOK 12.35); falta el certificado de firma de código (procura) |
 | PKCS#11 real DNIe | Sí | 🟢 |
 | PAdES válido | Sí | 🟢 |
 | Multifirma incremental | Sí | 🟢 |
@@ -76,7 +76,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | CRL | Sí | 🟢 |
 | OCSP | Sí | 🟢 |
 | Vigencia certificado | Sí | 🟢 |
-| Propósito/políticas | Sí | 🟡 (KeyUsage sí, EKU/CertificatePolicies no) |
+| Propósito/políticas | Sí | 🟡 (KeyUsage exigido; EKU/CertificatePolicies reportados y exigibles por configuración, apagado hasta tener los OID oficiales — RUNBOOK 12.34) |
 | Validador independiente | Sí | 🟢 (API + visor, ver RUNBOOK 12.20) |
 | Registro de resultados de validación | Sí | 🟢 |
 | Pruebas automatizadas PKI | Sí | 🟢 (Trust/PAdES, RUNBOOK 12.15/12.17; PKCS#11 real contra SoftHSM2, RUNBOOK 12.26 — corre solo en entornos con ese toolchain, nunca en CI) |
