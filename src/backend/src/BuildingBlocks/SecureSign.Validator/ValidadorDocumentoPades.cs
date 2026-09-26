@@ -33,14 +33,20 @@ public sealed class ValidadorDocumentoPades(ValidadorCertificados validadorCerti
             .Select(v => new ResultadoValidacionSelloArchivo(v.Valido, v.InstanteFirmaDeclarado, v.Certificado?.Subject, v.Error))
             .ToList();
 
+        // PAdES-LT (RUNBOOK.md 12.33): si el documento trae su DSS (cadena + CRL/OCSP embebidos al firmar),
+        // se usa para validar SIN red y en el instante de la firma — que es para lo que se embebió.
+        var dss = PdfDssReader.Leer(pdf);
+        var embebido = dss is null ? null : new MaterialRevocacionEmbebido(dss.CertificadosDer, dss.CrlsDer, dss.OcspsDer);
+
         var firmas = new List<ResultadoValidacionFirmaPades>(firmasReales.Count);
         foreach (var verificacion in firmasReales)
-            firmas.Add(await ValidarUnaAsync(verificacion, ct));
+            firmas.Add(await ValidarUnaAsync(verificacion, embebido, ct));
 
         return new ResultadoValidacionDocumentoPades(firmasReales.Count, firmas, sellosDeArchivo);
     }
 
-    private async Task<ResultadoValidacionFirmaPades> ValidarUnaAsync(ResultadoVerificacionPades verificacion, CancellationToken ct)
+    private async Task<ResultadoValidacionFirmaPades> ValidarUnaAsync(
+        ResultadoVerificacionPades verificacion, MaterialRevocacionEmbebido? embebido, CancellationToken ct)
     {
         var evidencia = new List<string>();
 
@@ -95,7 +101,29 @@ public sealed class ValidadorDocumentoPades(ValidadorCertificados validadorCerti
             ? $"Instante de validación de vigencia/revocación: {m:o} (declarado por el firmante en /M)."
             : $"Instante de validación de vigencia/revocación: {instanteValidacion:o} (no se encontró /M legible en la firma; se usó el instante de esta verificación).");
 
-        var validacionCertificado = await validadorCertificados.ValidarAsync(verificacion.Certificado, instanteValidacion, ct);
+        // Con DSS: primero SIN red y con el material embebido (el resultado que sigue siendo reproducible años
+        // después, aunque la CRL original ya no esté publicada). Si ese material no alcanza para concluir
+        // "confiable" (p. ej. le falta la CRL), se cae a la red — el comportamiento de antes — dejando el
+        // motivo en el expediente. Si el material embebido dice "revocado", no se le da otra oportunidad a la red.
+        ResultadoValidacionCertificado validacionCertificado;
+        if (embebido is not null)
+        {
+            var conMaterialEmbebido = await validadorCertificados.ValidarAsync(verificacion.Certificado, instanteValidacion, ct, embebido);
+            if (conMaterialEmbebido.EstadoFinal || conMaterialEmbebido.Revocacion.Combinado == EstadoRevocacion.Revoked)
+            {
+                validacionCertificado = conMaterialEmbebido;
+            }
+            else
+            {
+                evidencia.Add("El material embebido (DSS) no bastó para concluir; se consulta la red. Detalle del intento con DSS: "
+                    + string.Join(" | ", conMaterialEmbebido.Evidencia));
+                validacionCertificado = await validadorCertificados.ValidarAsync(verificacion.Certificado, instanteValidacion, ct);
+            }
+        }
+        else
+        {
+            validacionCertificado = await validadorCertificados.ValidarAsync(verificacion.Certificado, instanteValidacion, ct);
+        }
         evidencia.AddRange(validacionCertificado.Evidencia);
 
         return new ResultadoValidacionFirmaPades(

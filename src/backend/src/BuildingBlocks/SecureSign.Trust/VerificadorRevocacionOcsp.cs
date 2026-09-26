@@ -88,6 +88,44 @@ public sealed class VerificadorRevocacionOcsp(HttpClient http)
     }
 
     /// <summary>
+    /// Igual que <see cref="VerificarAsync"/> pero contra respuestas OCSP ya EMBEBIDAS en el documento
+    /// (PAdES-LT), sin red — ver <see cref="VerificadorRevocacionCrl.VerificarEmbebida"/> para el criterio
+    /// de tiempo (evaluado en <paramref name="instante"/>, no "ahora"). La firma de la respuesta se verifica
+    /// con la misma regla que en la consulta en vivo (<see cref="FirmaEsConfiable"/>).
+    /// </summary>
+    public static (EstadoRevocacion Estado, string Detalle) VerificarEmbebida(
+        X509Certificate2 certificado, X509Certificate2 emisor, IEnumerable<byte[]> ocspsDer, DateTimeOffset instante)
+    {
+        var emisorBc = new X509CertificateParser().ReadCertificate(emisor.RawData);
+        var certId = new CertificateID(CertificateID.DigestSha1, emisorBc, new BigInteger(certificado.SerialNumber, 16));
+        int descartadas = 0;
+
+        foreach (var der in ocspsDer)
+        {
+            try
+            {
+                var ocspResp = new OcspResp(der);
+                if (ocspResp.Status != OcspRespStatus.Successful) { descartadas++; continue; }
+
+                var basica = (BasicOcspResp)ocspResp.GetResponseObject();
+                var individual = basica.Responses.FirstOrDefault(r => r.GetCertID().Equals(certId));
+                if (individual is null || !FirmaEsConfiable(basica, emisorBc)) { descartadas++; continue; }
+                if (individual.NextUpdate?.ToUniversalTime() is { } siguiente && siguiente < instante.UtcDateTime) { descartadas++; continue; }
+
+                return individual.GetCertStatus() switch
+                {
+                    null => (EstadoRevocacion.Good, "OCSP embebido: certificado no revocado (firma de la respuesta verificada)."),
+                    RevokedStatus revocado => (EstadoRevocacion.Revoked, $"OCSP embebido: revocado el {revocado.RevocationTime:o}."),
+                    _ => (EstadoRevocacion.Unknown, "OCSP embebido: el responder no tiene información sobre este certificado (unknown)."),
+                };
+            }
+            catch { descartadas++; }
+        }
+
+        return (EstadoRevocacion.Unavailable, $"Ninguna de las {descartadas} respuesta(s) OCSP embebida(s) es utilizable (firma inválida, otro certificado o vencida antes de la firma).");
+    }
+
+    /// <summary>
     /// El firmante válido de una respuesta OCSP es o bien el propio emisor
     /// del certificado consultado (firma directa) o un certificado delegado,
     /// emitido por ese mismo emisor, que declare el EKU id-kp-OCSPSigning
