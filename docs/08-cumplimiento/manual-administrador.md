@@ -75,6 +75,21 @@ No se configura por `appsettings.json` — se carga desde disco, relativo al bin
 
 **Limitación conocida** (ver `ListaConfianzaIofe.cs`): no se verifica la firma XAdES de la propia TSL — se mitiga descargándola solo por HTTPS del dominio oficial, pero la verificación criptográfica de esa firma queda pendiente. No editar `tsl-pe.xml` a mano ni tomarlo de un espejo no oficial.
 
+**Política de EKU/CertificatePolicies** (sección `PoliticaCertificado` de Signature.Api, RUNBOOK 12.34): el motor siempre lee y reporta ambas extensiones del certificado del firmante. Por defecto NO rechaza nada. Para exigirlas cuando se tenga la lista oficial de OID:
+
+```json
+"PoliticaCertificado": {
+  "OidsPoliticaPermitidos": [ "<OID de política IOFE>" ],
+  "OidsEkuPermitidos": [],
+  "Exigir": true
+}
+```
+(una lista vacía no se evalúa; si ambas están configuradas deben cumplirse las dos; con `Exigir: false` el incumplimiento solo queda en la evidencia). Antes de activar `Exigir`, revisar en la evidencia de validaciones reales qué OID declaran los certificados de firma vigentes, para no rechazar firmantes legítimos.
+
+### 2.2.1 Distribución del Firmador Local: instalador MSI y firma de código (RUNBOOK 12.35)
+
+El job `release-manifest-firmador` de CI (push a `main`) construye `SecureSignFirmadorLocal-1.0.<n>.msi` (por usuario, runtime incluido), lo prueba instalando y desinstalando en un runner limpio y publica el MSI con `SHA256SUMS-instalador.txt`. **Para que el MSI salga firmado**, cargar en los secretos del repositorio `CODESIGN_PFX_BASE64` (el PFX del certificado de firma de código en base64) y `CODESIGN_PFX_PASSWORD`; sin ellos el MSI se genera SIN FIRMA, el manifiesto lo dice y CI emite una advertencia — no distribuirlo a usuarios finales. Construir en local: `installer/Construir-Instalador.ps1 -Version 1.0.5 [-Firmar -PfxRuta cert.pfx]` con la variable `CODESIGN_PFX_PASSWORD` (requiere `wix` 5.0.x y el Windows SDK). Instalación silenciosa en los equipos: `msiexec /i SecureSignFirmadorLocal-<versión>.msi /qn` (agregar `INICIAR_CON_WINDOWS=0` para no registrar el inicio automático).
+
 ### 2.3 PKCS#11 / DNIe (`Pkcs11`, en Crypto.Api)
 
 ```json

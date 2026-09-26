@@ -135,9 +135,10 @@ jobs:
   # integridad del software distribuido") y §14 (release controlado): esto
   # cubre la parte que SÍ se puede hacer sin comprar nada todavía — SBOM del
   # ejecutable distribuido y un manifiesto SHA-256 versionado por commit.
-  # La firma Authenticode del binario/instalador queda pendiente porque
-  # requiere un certificado de firma de código real, que es un trámite de
-  # compra/identidad jurídica, no una tarea de código (ver RUNBOOK.md 12.11).
+  # La firma Authenticode del binario/instalador depende de un certificado de
+  # firma de código real (trámite de compra/identidad jurídica, no de código):
+  # el pipeline de firma, el instalador MSI y su prueba ya existen (ver
+  # RUNBOOK.md 12.35) y se activan solos cuando exista el secreto CODESIGN_PFX_BASE64.
   # Solo corre en push a main — no en cada PR — porque es, conceptualmente,
   # el job "CI Release" que el informe pide separado del build de validación.
   release-manifest-firmador:
@@ -186,4 +187,64 @@ jobs:
           path: |
             publish/
             sbom/bom.json
+          retention-days: 90
+
+      # ---- Instalador MSI + firma Authenticode (RUNBOOK.md 12.35) ----------------------------------
+      # Cierra la parte de P0-06 que SÍ es ingeniería: instalador por usuario, pipeline de firma con
+      # verificación y prueba real de instalar/desinstalar. La FIRMA en sí depende de un certificado de firma
+      # de código (procura): mientras el secreto CODESIGN_PFX_BASE64 no exista, el MSI se genera SIN FIRMA, el
+      # manifiesto lo declara así y el paso avisa con una anotación — nunca se firma en silencio con otra cosa.
+      - name: Instalar WiX 5.0.x (herramienta .NET, licencia MS-RL)
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          "$env:USERPROFILE\.dotnet	ools" >> $env:GITHUB_PATH
+
+      - name: Preparar certificado de firma de código (solo si existe el secreto)
+        id: certificado
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+        run: |
+          if ($env:CODESIGN_PFX_BASE64) {
+            $ruta = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+            [IO.File]::WriteAllBytes($ruta, [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
+            "ruta=$ruta" >> $env:GITHUB_OUTPUT
+            "firmar=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "firmar=false" >> $env:GITHUB_OUTPUT
+            Write-Host "::warning::No existe el secreto CODESIGN_PFX_BASE64: el instalador se genera SIN FIRMA de código y no debe distribuirse a usuarios finales (P0-06)."
+          }
+
+      - name: Construir instalador (publicar, firmar, empaquetar MSI)
+        shell: pwsh
+        env:
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+        run: |
+          $parametros = @{ Version = "1.0.${{ github.run_number }}"; Salida = "artifacts/firmador-local" }
+          if ('${{ steps.certificado.outputs.firmar }}' -eq 'true') {
+            $parametros['Firmar'] = $true
+            $parametros['PfxRuta'] = '${{ steps.certificado.outputs.ruta }}'
+          }
+          ./src/backend/src/Tools/SecureSign.FirmadorLocal/installer/Construir-Instalador.ps1 @parametros
+
+      # Máquina limpia (runner nuevo): aquí SÍ se verifica también el protocolo securesign://.
+      - name: Probar instalador (instalar, verificar, desinstalar)
+        shell: pwsh
+        run: ./src/backend/src/Tools/SecureSign.FirmadorLocal/installer/Probar-Instalador.ps1 -Msi "artifacts/firmador-local/SecureSignFirmadorLocal-1.0.${{ github.run_number }}.msi" -Version "1.0.${{ github.run_number }}"
+
+      - name: Borrar el certificado del runner
+        if: always()
+        shell: pwsh
+        run: |
+          $ruta = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          if (Test-Path $ruta) { Remove-Item $ruta -Force }
+
+      - name: Publicar instalador (MSI + manifiesto)
+        uses: actions/upload-artifact@v4
+        with:
+          name: securesign-firmador-local-instalador-${{ github.sha }}
+          path: |
+            artifacts/firmador-local/*.msi
+            artifacts/firmador-local/SHA256SUMS-instalador.txt
           retention-days: 90
