@@ -139,7 +139,7 @@ public static class ServiceCollectionExtensions
 
         services.AddHttpClient<EmisorTokenInterno>(client =>
         {
-            client.BaseAddress = new Uri(opciones.Authority);
+            client.BaseAddress = new Uri(opciones.AuthorityInterna ?? opciones.Authority);
             client.DefaultRequestHeaders.Add("X-Internal-Service", opciones.NombreServicio);
             client.DefaultRequestHeaders.Add("X-Internal-Client-Secret", opciones.SecretoClienteInterno);
         });

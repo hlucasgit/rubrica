@@ -39,6 +39,26 @@ public sealed class JwtOptions
     public string Authority { get; set; } = default!;
 
     /// <summary>
+    /// SOLO servicios emisores: URL del listener INTERNO del Gateway (p. ej.
+    /// <c>http://gateway:8081</c>) a la que piden tokens vía
+    /// <c>POST /api/auth/interno/emitir</c>. Si no se define, usan
+    /// <see cref="Authority"/> (el mismo listener público). Ver
+    /// <see cref="PuertoInterno"/>.
+    /// </summary>
+    public string? AuthorityInterna { get; set; }
+
+    /// <summary>
+    /// SOLO el Gateway: puerto local (Kestrel) en el que ÚNICAMENTE se sirve
+    /// <c>POST /api/auth/interno/emitir</c>. En cualquier otro puerto ese
+    /// endpoint responde <c>404</c>, así que un balanceador que solo publica
+    /// el puerto público deja el endpoint que acuña tokens inalcanzable desde
+    /// fuera de la red interna. Se compara contra el puerto LOCAL de la
+    /// conexión (no contra el header <c>Host</c>, que el cliente controla).
+    /// Obligatorio fuera de Development (ver ValidadorOpcionesJwt).
+    /// </summary>
+    public int? PuertoInterno { get; set; }
+
+    /// <summary>
     /// SOLO servicios emisores (los que piden tokens al Gateway): su nombre
     /// (p. ej. <c>securesign-signature-api</c>), enviado en
     /// <c>X-Internal-Service</c>. El Gateway lo usa para buscar SU entrada en
