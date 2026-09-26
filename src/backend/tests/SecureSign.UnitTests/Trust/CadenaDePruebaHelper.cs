@@ -75,7 +75,8 @@ internal static class CadenaDePruebaHelper
     internal static NodoCadena GenerarHoja(
         NodoCadena emisora, string commonName, string urlEmisorCa, string urlOcsp, string urlCrl,
         DateTime? notBefore = null, DateTime? notAfter = null,
-        bool esCa = false, int keyUsage = KeyUsage.NonRepudiation | KeyUsage.DigitalSignature)
+        bool esCa = false, int keyUsage = KeyUsage.NonRepudiation | KeyUsage.DigitalSignature,
+        string[]? oidsEku = null, string[]? oidsPolitica = null)
     {
         var llaves = GenerarLlaves();
         var generador = new X509V3CertificateGenerator();
@@ -87,6 +88,12 @@ internal static class CadenaDePruebaHelper
         generador.SetPublicKey(llaves.Public);
         generador.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(esCa));
         generador.AddExtension(X509Extensions.KeyUsage, true, new KeyUsage(keyUsage));
+        if (oidsEku is { Length: > 0 })
+            generador.AddExtension(X509Extensions.ExtendedKeyUsage, false,
+                new ExtendedKeyUsage(oidsEku.Select(o => KeyPurposeID.GetInstance(new Org.BouncyCastle.Asn1.DerObjectIdentifier(o))).ToArray()));
+        if (oidsPolitica is { Length: > 0 })
+            generador.AddExtension(X509Extensions.CertificatePolicies, false,
+                new CertificatePolicies(oidsPolitica.Select(o => new PolicyInformation(new Org.BouncyCastle.Asn1.DerObjectIdentifier(o))).ToArray()));
         generador.AddExtension(X509Extensions.AuthorityInfoAccess, false, new AuthorityInformationAccess(new[]
         {
             new AccessDescription(AccessDescription.IdADCAIssuers, new GeneralName(GeneralName.UniformResourceIdentifier, urlEmisorCa)),

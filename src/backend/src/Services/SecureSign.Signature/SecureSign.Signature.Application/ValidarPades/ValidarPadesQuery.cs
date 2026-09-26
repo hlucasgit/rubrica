@@ -32,7 +32,10 @@ public sealed record FirmaValidadaDto(
     string EstadoRevocacionCombinado,
     bool EstadoFinal,
     IReadOnlyList<string> Evidencia,
-    string? Error);
+    string? Error,
+    IReadOnlyList<string> ExtendedKeyUsages,
+    IReadOnlyList<string> PoliticasCertificado,
+    string EstadoPolitica);
 
 /// <summary>
 /// Sello de tiempo de ARCHIVO (PAdES-LTA, RUNBOOK.md 12.24) — no es la firma

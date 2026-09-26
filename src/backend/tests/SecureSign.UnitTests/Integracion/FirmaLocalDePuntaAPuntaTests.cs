@@ -169,7 +169,8 @@ public sealed class FirmaLocalDePuntaAPuntaTests : IDisposable
 
     private Escenario Construir(
         DateTime? notBeforeHoja = null, DateTime? notAfterHoja = null,
-        bool hojaEnTsl = true, bool hojaRevocada = false, int indiceConfianza = 95)
+        bool hojaEnTsl = true, bool hojaRevocada = false, int indiceConfianza = 95,
+        string[]? oidsEku = null, string[]? oidsPolitica = null, OpcionesPoliticaCertificado? politica = null)
     {
         string sufijo = Guid.NewGuid().ToString("N");
         string urlRaiz = $"https://ca.prueba.local/raiz-{sufijo}.cer";
@@ -179,7 +180,8 @@ public sealed class FirmaLocalDePuntaAPuntaTests : IDisposable
 
         var raiz = CadenaDePruebaHelper.GenerarRaiz($"Raiz Prueba {sufijo}");
         var intermedia = CadenaDePruebaHelper.GenerarIntermedia(raiz, $"Intermedia Prueba {sufijo}", urlRaiz);
-        var hoja = CadenaDePruebaHelper.GenerarHoja(intermedia, $"Firmante Prueba {sufijo}", urlIntermedia, urlOcsp, urlCrl, notBeforeHoja, notAfterHoja);
+        var hoja = CadenaDePruebaHelper.GenerarHoja(intermedia, $"Firmante Prueba {sufijo}", urlIntermedia, urlOcsp, urlCrl, notBeforeHoja, notAfterHoja,
+            oidsEku: oidsEku, oidsPolitica: oidsPolitica);
 
         // CA de prueba: sirve la cadena por AIA, y CRL + OCSP firmados con las llaves reales de la intermedia.
         var ca = new HandlerHttpFalso();
@@ -202,7 +204,8 @@ public sealed class FirmaLocalDePuntaAPuntaTests : IDisposable
         var http = new HttpClient(red);
         var validadorCertificados = new ValidadorCertificados(
             AlmacenRaicesConfiables.CargarDesdeDirectorio(dirRaices), ListaConfianzaIofe.CargarDesdeArchivo(tsl),
-            new DescargadorCertificadosIntermedios(http), new VerificadorRevocacionCrl(http), new VerificadorRevocacionOcsp(http));
+            new DescargadorCertificadosIntermedios(http), new VerificadorRevocacionCrl(http), new VerificadorRevocacionOcsp(http),
+            politica);
 
         var (generadorTsa, _) = TsaDePruebaHelper.CrearTsaDePrueba();
         var tsa = new TsaFalsa(generadorTsa);
@@ -392,6 +395,91 @@ public sealed class FirmaLocalDePuntaAPuntaTests : IDisposable
 
         AssertRechazoSinEfectos(e, resultado, "ticket");
         Assert.Contains(e.Auditoria.Eventos, ev => ev.Tipo == "TicketFirmaLocalRechazado");
+    }
+
+    // ---------------------------------------------------------------- EKU y CertificatePolicies (RUNBOOK 12.34)
+
+    private const string EkuCorreoSeguro = "1.3.6.1.5.5.7.3.4";   // el que declara el DNIe real (id-kp-emailProtection)
+    private const string PoliticaDePrueba = "1.3.6.1.4.1.99999.1.1";
+    private const string OtraPolitica = "1.3.6.1.4.1.99999.2.2";
+
+    [Fact]
+    public async Task Por_defecto_EKU_y_politicas_se_reportan_pero_no_rechazan()
+    {
+        // Configuración por defecto (sin OID permitidos): un certificado con el EKU "Secure Email" del DNIe real y una política cualquiera se acepta.
+        var e = Construir(oidsEku: [EkuCorreoSeguro], oidsPolitica: [PoliticaDePrueba]);
+
+        var resultado = await e.Handler.Handle(e.ComoLoHaceElFirmadorLocal(), CancellationToken.None);
+        Assert.True(resultado.EsExitoso, resultado.Error);
+
+        var validacion = await e.ValidadorIndependiente.ValidarAsync(e.Documentos.PadesGuardado!);
+        var evidencia = validacion.Firmas.Single().Evidencia;
+        Assert.True(validacion.DocumentoValido);
+        Assert.Contains(evidencia, l => l.Contains("ExtendedKeyUsage") && l.Contains(EkuCorreoSeguro));
+        Assert.Contains(evidencia, l => l.Contains("CertificatePolicies") && l.Contains(PoliticaDePrueba));
+        Assert.Contains(evidencia, l => l.Contains("solo informativa"));
+        Assert.Equal(EstadoPolitica.SoloInformativa, validacion.Firmas.Single().ValidacionCertificado!.Politica!.Estado);
+    }
+
+    [Fact]
+    public async Task Un_certificado_sin_esas_extensiones_se_acepta_y_se_reporta_como_no_declarado()
+    {
+        var e = Construir();
+
+        var resultado = await e.Handler.Handle(e.ComoLoHaceElFirmadorLocal(), CancellationToken.None);
+        Assert.True(resultado.EsExitoso, resultado.Error);
+
+        var validacion = await e.ValidadorIndependiente.ValidarAsync(e.Documentos.PadesGuardado!);
+        Assert.Contains(validacion.Firmas.Single().Evidencia, l => l.Contains("CertificatePolicies: (no declarado)"));
+    }
+
+    [Fact]
+    public async Task Exigida_y_el_certificado_cumple_se_acepta()
+    {
+        var politica = new OpcionesPoliticaCertificado { OidsPoliticaPermitidos = [PoliticaDePrueba, OtraPolitica], OidsEkuPermitidos = [EkuCorreoSeguro], Exigir = true };
+        var e = Construir(oidsEku: [EkuCorreoSeguro], oidsPolitica: [PoliticaDePrueba], politica: politica);
+
+        var resultado = await e.Handler.Handle(e.ComoLoHaceElFirmadorLocal(), CancellationToken.None);
+
+        Assert.True(resultado.EsExitoso, resultado.Error);
+    }
+
+    [Fact]
+    public async Task Exigida_y_el_certificado_no_cumple_se_rechaza_con_el_motivo()
+    {
+        var politica = new OpcionesPoliticaCertificado { OidsPoliticaPermitidos = [OtraPolitica], Exigir = true };
+        var e = Construir(oidsPolitica: [PoliticaDePrueba], politica: politica);
+
+        var resultado = await e.Handler.Handle(e.ComoLoHaceElFirmadorLocal(), CancellationToken.None);
+
+        AssertRechazoSinEfectos(e, resultado, "validación de confianza", motivoEspecifico: "EXIGIDA");
+        Assert.Contains(e.Auditoria.Eventos, ev => ev.Tipo == "CertificadoRechazadoPorConfianza");
+    }
+
+    [Fact]
+    public async Task Exigida_y_el_certificado_no_declara_ninguna_politica_se_rechaza()
+    {
+        var politica = new OpcionesPoliticaCertificado { OidsPoliticaPermitidos = [PoliticaDePrueba], Exigir = true };
+        var e = Construir(politica: politica);
+
+        var resultado = await e.Handler.Handle(e.ComoLoHaceElFirmadorLocal(), CancellationToken.None);
+
+        AssertRechazoSinEfectos(e, resultado, "validación de confianza", motivoEspecifico: "EXIGIDA");
+    }
+
+    [Fact]
+    public async Task Configurada_pero_no_exigida_solo_se_registra_el_incumplimiento()
+    {
+        var politica = new OpcionesPoliticaCertificado { OidsPoliticaPermitidos = [OtraPolitica], Exigir = false };
+        var e = Construir(oidsPolitica: [PoliticaDePrueba], politica: politica);
+
+        var resultado = await e.Handler.Handle(e.ComoLoHaceElFirmadorLocal(), CancellationToken.None);
+        Assert.True(resultado.EsExitoso, resultado.Error);
+
+        var validacion = await e.ValidadorIndependiente.ValidarAsync(e.Documentos.PadesGuardado!);
+        Assert.True(validacion.DocumentoValido);
+        Assert.Equal(EstadoPolitica.NoCumple, validacion.Firmas.Single().ValidacionCertificado!.Politica!.Estado);
+        Assert.Contains(validacion.Firmas.Single().Evidencia, l => l.Contains("solo informativa"));
     }
 
     // ---------------------------------------------------------------- mejoras best-effort: nunca abortan la firma

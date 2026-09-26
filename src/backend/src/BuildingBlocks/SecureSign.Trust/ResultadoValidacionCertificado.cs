@@ -69,7 +69,8 @@ public sealed record ResultadoValidacionCertificado(
     DateTimeOffset InstanteValidacion,
     IReadOnlyList<string> Evidencia,
     string? Error,
-    MaterialValidacionLargoPlazo MaterialLargoPlazo)
+    MaterialValidacionLargoPlazo MaterialLargoPlazo,
+    DatosPoliticaCertificado? Politica = null)
 {
     public bool EstadoFinal =>
         Error is null

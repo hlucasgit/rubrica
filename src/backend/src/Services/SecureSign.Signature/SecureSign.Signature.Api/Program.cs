@@ -51,6 +51,10 @@ builder.Services.AddSingleton(_ => AlmacenRaicesConfiables.CargarDesdeDirectorio
     Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "raices")));
 builder.Services.AddSingleton(_ => ListaConfianzaIofe.CargarDesdeArchivo(
     Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml")));
+// Política opcional de EKU/CertificatePolicies (RUNBOOK.md 12.34): sección "PoliticaCertificado" de
+// appsettings — por defecto vacía, o sea solo informativa.
+builder.Services.AddSingleton(builder.Configuration.GetSection(OpcionesPoliticaCertificado.SeccionConfiguracion).Get<OpcionesPoliticaCertificado>()
+    ?? new OpcionesPoliticaCertificado());
 builder.Services.AddScoped<ValidadorCertificados>();
 builder.Services.AddScoped<IValidadorConfianzaFirmante, ValidadorConfianzaFirmanteIofe>();
 
