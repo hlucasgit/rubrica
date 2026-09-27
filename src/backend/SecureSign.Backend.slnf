@@ -9,6 +9,7 @@
       "src\\BuildingBlocks\\SecureSign.Trust\\SecureSign.Trust.csproj",
       "src\\BuildingBlocks\\SecureSign.Validator\\SecureSign.Validator.csproj",
       "src\\BuildingBlocks\\SecureSign.Tsa\\SecureSign.Tsa.csproj",
+      "src\\Tools\\SecureSign.SecretTool\\SecureSign.SecretTool.csproj",
       "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Domain\\SecureSign.Documents.Domain.csproj",
       "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Application\\SecureSign.Documents.Application.csproj",
       "src\\Services\\SecureSign.Documents\\SecureSign.Documents.Infrastructure\\SecureSign.Documents.Infrastructure.csproj",
