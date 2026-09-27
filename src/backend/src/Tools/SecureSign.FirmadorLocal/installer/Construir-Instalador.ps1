@@ -30,7 +30,10 @@ if (Test-Path $Salida) { Remove-Item $Salida -Recurse -Force }
 New-Item -ItemType Directory -Path $publicacion -Force | Out-Null
 
 Write-Host "== Publicar (autocontenido, win-x64, versión $Version)"
-dotnet publish $proyecto -c Release -r win-x64 --self-contained true -p:Version=$Version -p:DebugType=None -o $publicacion
+# En CI se marca la compilación como "de integración continua" (rutas normalizadas, build reproducible).
+$extra = @()
+if ($env:GITHUB_ACTIONS) { $extra += '-p:ContinuousIntegrationBuild=true' }
+dotnet publish $proyecto -c Release -r win-x64 --self-contained true -p:Version=$Version -p:DebugType=None @extra -o $publicacion
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish falló.' }
 
 $argsFirma = @{}

@@ -10,7 +10,7 @@ Una aplicación pequeña que corre en **tu propia computadora** y firma document
 
 ## 2. Instalación y primer arranque
 
-**Instalador (recomendado)**: si tu administrador te entregó `SecureSignFirmadorLocal-<versión>.msi`, basta con abrirlo — instala solo para tu usuario, no pide permisos de administrador, incluye todo lo necesario (no hace falta instalar .NET), deja el programa corriendo en la bandeja y lo inicia con Windows. Para no iniciarlo con Windows, el administrador puede instalar con `msiexec /i SecureSignFirmadorLocal-<versión>.msi INICIAR_CON_WINDOWS=0`. Se desinstala desde "Aplicaciones instaladas" de Windows. Antes de instalarlo, comprueba que el archivo esté firmado (clic derecho → Propiedades → Firmas digitales); un instalador SIN firma no debe usarse (ver la sección 7).
+**Instalador (recomendado)**: si tu administrador te entregó `SecureSignFirmadorLocal-<versión>.msi`, basta con abrirlo — instala solo para tu usuario, no pide permisos de administrador, incluye todo lo necesario (no hace falta instalar .NET), deja el programa corriendo en la bandeja y lo inicia con Windows. Para no iniciarlo con Windows, el administrador puede instalar con `msiexec /i SecureSignFirmadorLocal-<versión>.msi INICIAR_CON_WINDOWS=0`. Se desinstala desde "Aplicaciones instaladas" de Windows. Si tu antivirus lo bloquea, no lo desactives: ver [`compatibilidad-antivirus.md`](compatibilidad-antivirus.md). Antes de instalarlo, comprueba que el archivo esté firmado (clic derecho → Propiedades → Firmas digitales); un instalador SIN firma no debe usarse (ver la sección 7).
 
 **Sin instalador (manual)**:
 
