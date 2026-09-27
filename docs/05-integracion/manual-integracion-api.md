@@ -1,6 +1,8 @@
 # Manual de Integración — SecureSign API
 
 > **Reescrito el 2026-09-16 contra la API real** (auditado contra `src/backend/src/Gateway`, `src/backend/src/Services/*/Controllers`, y el ejemplo funcional `src/backend/ejemplos-integracion/firmar-documento.sh`). La versión anterior de este manual describía una API distinta — con versionado `/v1`, sandbox, portal de desarrolladores, `X-Api-Key`, shapes de request/response diferentes, y una sección de webhooks completa — que no corresponde a nada implementado. Lo marcado `[roadmap]` abajo es la intención de la versión anterior, no construida todavía; todo lo demás es real y probado (script de ejemplo funcionando de punta a punta contra el stack Docker real).
+>
+> **Actualizado el 2026-09-27** contra el estado real del código a esa fecha: el límite de tasa del endpoint de token (capítulo 3) ya está implementado — el `[roadmap]` de la versión anterior quedó obsoleto y se corrigió; el validador PAdES (5.9) ahora reporta también `extendedKeyUsages`, `politicasCertificado` y `estadoPolitica`; se agregó una nota de CORS (5.13) para integraciones desde el navegador; y se corrigió la sección de SDKs — los archivos en `sdk/` sí existen en el repositorio (a diferencia de lo que decía la versión anterior de este manual), pero describen una API distinta a la real y no deben usarse tal cual (ver el aviso al final de cada archivo y el capítulo final de este manual).
 
 ## Capítulo 1 — Introducción
 
@@ -46,6 +48,17 @@ El `access_token` es un JWT firmado con RS256 por el Gateway (único firmante de
 No existe soporte para `X-Api-Key` en ningún endpoint. Toda llamada autenticada usa el `access_token` OAuth2.
 
 > **Nunca** exponer `client_secret` en código de frontend/móvil. La autenticación OAuth2 debe ejecutarse siempre desde el backend del sistema integrador.
+
+### Límite de tasa de `/api/auth/token`
+
+El Gateway limita este endpoint a **10 peticiones por minuto por dirección IP de origen** (protege contra adivinación del `client_secret` y contra el costo de verificar un hash Argon2id en cada intento — ver `src/backend/RUNBOOK.md` 12.29). Al superarlo:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+```
+
+Un integrador que cachea el `access_token` hasta su expiración (buena práctica del capítulo 7) no debería acercarse a este límite. Si varias instancias del sistema integrador comparten una sola IP saliente, tenerlo en cuenta al dimensionar cuántas piden token de forma independiente.
 
 ## Capítulo 4 — Flujo completo de integración
 
@@ -210,6 +223,8 @@ Sin autenticación — endpoint público.
 ```
 No incluye `nombre`, `hash`, `documento` ni `cadenaConfianza` — solo el veredicto y el estado de cada firmante por orden. Para un expediente completo de validación PAdES (certificados, cadena de confianza IOFE, revocación, sello de tiempo), ver `POST /api/validador/pdf` (también público, recibe el PDF directamente — ver RUNBOOK.md 12.12) y el visor "Rúbrica Validador" en `src/frontend/validador-web`.
 
+Cada objeto de firma que devuelve `POST /api/validador/pdf` incluye, además de los campos criptográficos (`firmaCriptograficaValida`, `certificadoVigente`, `cadenaValida`, `raizConfiableIofe`, `propositoValido`, `estadoRevocacionOcsp/Crl/Combinado`, `estadoFinal`, `evidencia`): `extendedKeyUsages` y `politicasCertificado` (los OID que declara el certificado del firmante, siempre reportados) y `estadoPolitica` (`SoloInformativa` por defecto, o `Cumple`/`NoCumple` si el operador configuró una lista de OID permitidos — ver RUNBOOK.md 12.34). Ninguno de los tres afecta `estadoFinal` salvo que el operador haya activado la exigencia.
+
 ### 5.10 Rechazar firma
 
 ```http
@@ -228,7 +243,13 @@ Content-Type: application/json
 - `GET /api/firmas/{id}/documento-visual` — vista previa para posicionar la firma.
 - `GET /api/evidencias/...` y `GET /api/auditoria/...` — consulta de evidencia y auditoría, ver los servicios `SecureSign.Evidence`/`SecureSign.Audit`.
 
-### 5.12 Webhooks `[roadmap — no implementado]`
+### 5.12 CORS (integraciones desde el navegador)
+
+Si el sistema integrador llama a la API directamente desde JavaScript en el navegador del usuario final (en vez de desde su propio backend), el Gateway aplica una política CORS restrictiva fuera de entornos de desarrollo: el operador de SecureSign debe autorizar explícitamente el origen del sistema integrador (`Cors:OrigenesPermitidos`, ver RUNBOOK.md 12.31). Sin esa autorización, el navegador bloquea las respuestas aunque la llamada al servidor sea exitosa.
+
+La recomendación general — y la más simple de operar — sigue siendo llamar a la API desde el backend del sistema integrador, nunca desde el navegador del usuario final: así el `client_secret` nunca queda expuesto y la integración no depende de la configuración de CORS del operador.
+
+### 5.13 Webhooks `[roadmap — no implementado]`
 
 No existe ningún mecanismo de webhooks salientes hoy — ni registro de URL de callback, ni eventos, ni firma HMAC. El sistema integrador debe hacer *polling* de `GET /api/firmas/{id}/estado`.
 
@@ -241,7 +262,7 @@ No existe ningún mecanismo de webhooks salientes hoy — ni registro de URL de 
 | 401 Unauthorized | Token ausente, expirado o inválido | Renovar token vía `/api/auth/token` |
 | 403 Forbidden | Token válido pero sin el scope requerido | Verificar los `scope` concedidos al cliente |
 | 404 Not Found | Recurso inexistente o no perteneciente al tenant del token | Verificar el id y que corresponde al mismo tenant |
-| 429 Too Many Requests `[roadmap]` | No implementado hoy — el Gateway no tiene rate limiting | — |
+| 429 Too Many Requests | Límite de tasa del Gateway (ver capítulo 3.4) | Reintentar respetando la cabecera `Retry-After` |
 | 500 Internal Server Error | Error no controlado | Reintentar con backoff |
 
 Formato real de error (confirmado en los controllers):
@@ -266,4 +287,12 @@ El ejemplo autoritativo de este manual es `src/backend/ejemplos-integracion/firm
 ./firmar-documento.sh http://localhost:8080 ./contrato.pdf
 ```
 
-`[roadmap]` No existen todavía SDKs oficiales (.NET/JavaScript/Python) — los ejemplos de código de una versión anterior de este manual describían un cliente (`SecureSignClient`) que no existe en el repositorio. Hasta que exista un SDK real, integrar con llamadas HTTP directas (como hace el script de ejemplo) es la única vía soportada.
+## SDK de referencia (`sdk/dotnet`, `sdk/javascript`, `sdk/python`) — NO USAR TAL CUAL
+
+> **Corrección (2026-09-27)**: la versión anterior de este manual decía que ningún `SecureSignClient` existía en el repositorio. Es incorrecto — los tres archivos existen (`sdk/dotnet/SecureSignClient.cs`, `sdk/javascript/secureSignClient.js`, `sdk/python/securesign_client.py`), con código real y funcional. El error real es otro: describen una API que **no es la real**, heredada de la versión anterior de este manual:
+
+- `baseUrl`/`base_url` por defecto apunta a `https://api.securesign.pe/v1` — no existe versionado `/v1` en la API real (capítulo 2).
+- El constructor recibe `apiKey`/`api_key` — la API real usa un par `client_id`/`client_secret` (capítulo 3), no una única llave.
+- El SDK .NET modela `Firmante` con `Nombre`, `DocumentoIdentidad`, `Correo`, `Orden` — el endpoint real `POST /api/firmas/solicitudes` (5.2) solo acepta `{ usuarioId, orden }`; no envía ni acepta nombre, documento de identidad ni correo.
+
+**No integrar contra estos archivos sin corregirlos primero.** Cada uno lleva ahora una advertencia equivalente en su encabezado. Hasta que exista un SDK real alineado con esta API, integrar con llamadas HTTP directas (como hace el script de la sección anterior) es la única vía soportada y confiable.

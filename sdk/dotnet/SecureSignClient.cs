@@ -4,6 +4,16 @@
 // Este archivo es una referencia de diseño del SDK oficial; para producción
 // debe empaquetarse como proyecto NuGet independiente (SecureSign.Sdk) con
 // versionado semántico propio, separado del backend (src/backend).
+//
+// ⚠️ DESACTUALIZADO — NO USAR TAL CUAL (ver manual-integracion-api.md,
+// "SDK de referencia — NO USAR TAL CUAL"). Este archivo describe una API
+// distinta a la real:
+//   - baseUrl por defecto trae /v1 — la API real no tiene versionado de rutas.
+//   - El constructor pide (apiKey, tenant) — la API real usa un par
+//     client_id/client_secret, no una sola llave.
+//   - El registro Firmante trae Nombre/DocumentoIdentidad/Correo/Orden — el
+//     endpoint real POST /api/firmas/solicitudes solo acepta { usuarioId, orden }.
+// Corregir estos puntos antes de integrar contra un Gateway real.
 
 using System.Net.Http.Headers;
 using System.Net.Http.Json;

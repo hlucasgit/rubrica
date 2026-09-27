@@ -4,6 +4,15 @@
  *
  * Uso previsto: backend Node.js de un sistema integrador. NUNCA usar en
  * frontend con el apiKey embebido — ver manual, capítulo 7 (buenas prácticas).
+ *
+ * ⚠️ DESACTUALIZADO — NO USAR TAL CUAL (ver manual-integracion-api.md,
+ * "SDK de referencia — NO USAR TAL CUAL"). Este archivo describe una API
+ * distinta a la real:
+ *   - baseUrl por defecto trae /v1 — la API real no tiene versionado de rutas.
+ *   - El constructor pide { apiKey, tenant } — la API real usa un par
+ *     client_id/client_secret (docs/05-integracion/manual-integracion-api.md
+ *     capítulo 3), no una sola llave.
+ * Corregir estos dos puntos antes de integrar contra un Gateway real.
  */
 class SecureSignClient {
   constructor({ apiKey, tenant, baseUrl = "https://api.securesign.pe/v1" }) {
