@@ -9,11 +9,10 @@ namespace SecureSign.UnitTests.Trust;
 /// <summary>
 /// Prueba la verificación XAdES/XML-DSig de la TSL (RUNBOOK.md 12.22) con
 /// documentos de prueba firmados de verdad con <c>SignedXml</c> — no solo
-/// contra el archivo real de INDECOPI, que hoy NO verifica (hallazgo real,
-/// documentado en <see cref="VerificadorFirmaTsl"/>, confirmado con tres
-/// métodos independientes y una descarga fresca byte-idéntica). Estas
-/// pruebas demuestran que el MECANISMO en sí es correcto — el problema
-/// está en el archivo publicado, no en este código.
+/// contra el archivo real de INDECOPI. Hasta RUNBOOK.md 12.37 esa prueba
+/// afirmaba lo contrario (que la TSL real "no verifica"): era un error propio
+/// del verificador, corregido en 12.38 — ahora la prueba real exige que SÍ
+/// verifique, y que un solo byte alterado la haga fallar.
 /// </summary>
 public sealed class VerificadorFirmaTslTests : IDisposable
 {
@@ -66,6 +65,38 @@ public sealed class VerificadorFirmaTslTests : IDisposable
         doc.PreserveWhitespace = true;
 
         string ruta = Path.Combine(Path.GetTempPath(), $"tsl-firmada-prueba-{Guid.NewGuid():N}.xml");
+        doc.Save(ruta);
+        _archivos.Add(ruta);
+        return ruta;
+    }
+
+    /// <summary>Firma VÁLIDA, pero solo sobre un hijo (#hijo-id): el resto del documento —que es lo que luego se lee— queda sin firmar.</summary>
+    private string EscribirTslFirmadaSoloUnFragmento(RSA llavePrivada, X509Certificate2 certificadoFirmante, bool duplicarIdDeLaRaiz = false)
+    {
+        var doc = new XmlDocument { PreserveWhitespace = true };
+        doc.LoadXml("<tsl:TrustServiceStatusList xmlns:tsl=\"http://uri.etsi.org/02231/v2#\" Id=\"root-id\"><tsl:SchemeInformation Id=\"hijo-id\"/><tsl:Sin-firmar/></tsl:TrustServiceStatusList>");
+
+        var signedXml = new SignedXml(doc) { SigningKey = llavePrivada };
+        signedXml.SignedInfo!.CanonicalizationMethod = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
+        signedXml.SignedInfo.SignatureMethod = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
+        var referencia = new Reference { Uri = "#hijo-id", DigestMethod = "http://www.w3.org/2001/04/xmlenc#sha256" };
+        referencia.AddTransform(new XmlDsigC14NTransform());
+        signedXml.AddReference(referencia);
+        var keyInfo = new KeyInfo();
+        keyInfo.AddClause(new KeyInfoX509Data(certificadoFirmante));
+        signedXml.KeyInfo = keyInfo;
+        signedXml.ComputeSignature();
+        doc.DocumentElement!.AppendChild(doc.ImportNode(signedXml.GetXml(), true));
+
+        if (duplicarIdDeLaRaiz)
+        {
+            // Un segundo elemento con el mismo Id de la raíz: la referencia podría resolver a otro elemento que el leído.
+            var copia = doc.CreateElement("tsl", "Duplicado", "http://uri.etsi.org/02231/v2#");
+            copia.SetAttribute("Id", "root-id");
+            doc.DocumentElement.AppendChild(copia);
+        }
+
+        string ruta = Path.Combine(Path.GetTempPath(), $"tsl-fragmento-{Guid.NewGuid():N}.xml");
         doc.Save(ruta);
         _archivos.Add(ruta);
         return ruta;
@@ -128,21 +159,85 @@ public sealed class VerificadorFirmaTslTests : IDisposable
     }
 
     [Fact]
-    public void La_TSL_real_de_INDECOPI_hoy_no_verifica_contra_su_propio_certificado_embebido()
+    public void Una_firma_valida_que_no_cubre_el_documento_completo_se_rechaza()
     {
-        // Documenta el hallazgo real de RUNBOOK.md 12.22 como prueba de
-        // regresión — si INDECOPI corrige su pipeline de publicación, esta
-        // prueba empezará a fallar y hay que actualizarla (señal de que ya
-        // se puede activar CargarDesdeArchivoFirmado en producción).
-        string directorioTrust = AppContext.BaseDirectory;
-        string rutaTsl = Path.Combine(directorioTrust, "..", "..", "..", "..", "..", "src", "Services", "SecureSign.Signature", "SecureSign.Signature.Api", "ConfianzaIofe", "tsl-pe.xml");
-        string rutaAncla = Path.Combine(directorioTrust, "..", "..", "..", "..", "..", "src", "Services", "SecureSign.Signature", "SecureSign.Signature.Api", "ConfianzaIofe", "tsl-firmante-raiz.crt");
+        using var llave = RSA.Create(2048);
+        var raiz = GenerarAutofirmado("Raiz Que Firma Un Fragmento", llave);
+        string ruta = EscribirTslFirmadaSoloUnFragmento(llave, raiz);
 
-        if (!File.Exists(rutaTsl) || !File.Exists(rutaAncla))
-            return; // archivo real no presente en este entorno de build — no es un fallo de la prueba.
+        var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, raiz));
+        Assert.Contains("no cubre el documento completo", ex.Message);
+    }
 
-        var anclaReal = new X509Certificate2(rutaAncla);
-        var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(rutaTsl, anclaReal));
+    [Fact]
+    public void Un_Id_repetido_en_la_raiz_se_rechaza_como_posible_envoltura_de_firma()
+    {
+        // La firma sí cubre la raíz (Id "root-id" con transformación envolvente)… pero el Id aparece dos veces.
+        using var llave = RSA.Create(2048);
+        var raiz = GenerarAutofirmado("Raiz Con Id Duplicado", llave);
+        string ruta = EscribirTslFirmada(llave, raiz);
+        var doc = new XmlDocument { PreserveWhitespace = true };
+        doc.Load(ruta);
+        var duplicado = doc.CreateElement("tsl", "Duplicado", "http://uri.etsi.org/02231/v2#");
+        duplicado.SetAttribute("Id", "root-id");
+        doc.DocumentElement!.PrependChild(duplicado);
+        doc.Save(ruta);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, raiz));
+        Assert.Contains("más de una vez", ex.Message);
+    }
+
+    private static (string Tsl, string Ancla)? RutasDeLaTslReal()
+    {
+        string baseDir = AppContext.BaseDirectory;
+        string dir = Path.Combine(baseDir, "..", "..", "..", "..", "..", "src", "Services", "SecureSign.Signature", "SecureSign.Signature.Api", "ConfianzaIofe");
+        string tsl = Path.Combine(dir, "tsl-pe.xml"), ancla = Path.Combine(dir, "tsl-firmante-raiz.crt");
+        return File.Exists(tsl) && File.Exists(ancla) ? (tsl, ancla) : null;
+    }
+
+    /// <summary>
+    /// Regresión del error de 12.22 (corregido en 12.38): la TSL REAL de INDECOPI verifica contra su propio
+    /// certificado embebido y contra el ancla oficial. Su firma es de un firmante externo que canonicaliza el
+    /// SignedInfo EN CONTEXTO (con los espacios de nombres heredados de la raíz), justo el caso en que
+    /// <c>new SignedXml(doc)</c> daba un falso negativo — ningún fixture propio, firmado con el mismo SignedXml,
+    /// puede reproducir esa diferencia, por eso esta prueba usa el archivo real.
+    /// </summary>
+    [Fact]
+    public void La_TSL_real_de_INDECOPI_verifica_contra_el_ancla_oficial_y_carga_sus_servicios()
+    {
+        if (RutasDeLaTslReal() is not { } rutas) return; // archivo real no presente en este entorno de build.
+
+        var lista = ListaConfianzaIofe.CargarDesdeArchivoFirmado(rutas.Tsl, new X509Certificate2(rutas.Ancla));
+
+        Assert.True(lista.FirmaVerificada);
+        Assert.NotEmpty(lista.ServiciosAcreditados);
+    }
+
+    [Fact]
+    public void Un_solo_byte_alterado_en_la_TSL_real_la_hace_fallar()
+    {
+        if (RutasDeLaTslReal() is not { } rutas) return;
+
+        string contenido = File.ReadAllText(rutas.Tsl);
+        const string marca = "undersupervision";
+        Assert.Contains(marca, contenido);
+        string alterado = contenido.Replace(marca, "supervisionceased", StringComparison.Ordinal); // un servicio deja de estar "bajo supervisión"
+        string ruta = Path.Combine(Path.GetTempPath(), $"tsl-real-alterada-{Guid.NewGuid():N}.xml");
+        File.WriteAllText(ruta, alterado);
+        _archivos.Add(ruta);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, new X509Certificate2(rutas.Ancla)));
         Assert.Contains("NO verifica", ex.Message);
+    }
+
+    [Fact]
+    public void La_TSL_real_verificada_carga_los_mismos_servicios_que_sin_verificar()
+    {
+        if (RutasDeLaTslReal() is not { } rutas) return;
+
+        var verificada = ListaConfianzaIofe.CargarDesdeArchivoFirmado(rutas.Tsl, new X509Certificate2(rutas.Ancla));
+        var sinVerificar = ListaConfianzaIofe.CargarDesdeArchivo(rutas.Tsl);
+
+        Assert.Equal(sinVerificar.ServiciosAcreditados.Count, verificada.ServiciosAcreditados.Count);
     }
 }
