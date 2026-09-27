@@ -27,19 +27,19 @@ namespace SecureSign.Trust;
 /// adicional, no XML-DSig puro). Tampoco verifica marcas de tiempo ni
 /// revocación del propio certificado firmante de la TSL.
 ///
-/// HALLAZGO REAL (ver RUNBOOK.md 12.22, NO ocultado): la TSL real que
-/// INDECOPI publica hoy en https://iofe.indecopi.gob.pe/TSL/tsl-pe.xml NO
-/// verifica contra su propio certificado embebido con esta implementación
-/// — confirmado con tres métodos independientes (SignedXml.CheckSignature,
-/// replicación manual de C14N+SHA256, y el método interno
-/// SignedXml.GetC14NDigest vía reflexión) contra una descarga fresca
-/// byte-idéntica al archivo del repositorio, descartando corrupción local.
-/// El propio motor XML-DSig de .NET se probó correcto firmando y
-/// verificando un documento análogo. Por eso <see cref="ListaConfianzaIofe.CargarDesdeArchivoFirmado"/>
-/// NO se usa todavía en producción (`Signature.Api` sigue con
-/// `CargarDesdeArchivo`, sin verificar) — activar esto como bloqueante
-/// tumbaría el arranque del servicio contra un dato real y públicamente
-/// servido, no contra un archivo corrupto localmente.
+/// CORRECCIÓN (RUNBOOK.md 12.38): hasta 12.37 esta clase creaba
+/// <c>new SignedXml(doc)</c> (contexto = documento entero) y con eso la TSL
+/// REAL de INDECOPI parecía "no verificar" — se documentó como un defecto del
+/// dato oficial. Era un error propio: con <c>new SignedXml(elementoFirma)</c>
+/// (contexto = el propio elemento &lt;ds:Signature&gt;) la firma de INDECOPI
+/// verifica, y se comprobó por separado, sin SignedXml, que la firma RSA es
+/// válida sobre la canonicalización C14N inclusiva del SignedInfo EN CONTEXTO
+/// (con los espacios de nombres heredados), tal como exige XML-DSig.
+///
+/// Además exige que la firma CUBRA el documento completo (ver
+/// <see cref="ExigirQueLaFirmaCubreElDocumentoCompleto"/>): sin eso, una
+/// firma válida sobre un fragmento cualquiera daría por bueno un archivo al
+/// que un atacante agregó servicios acreditados fuera de lo firmado.
 /// </summary>
 internal static class VerificadorFirmaTsl
 {
@@ -64,6 +64,14 @@ internal static class VerificadorFirmaTsl
         var doc = new XmlDocument { PreserveWhitespace = true };
         doc.Load(rutaXml);
 
+        // Antes de tocar SignedXml: un Id repetido permitiría que la referencia firmada resuelva a un elemento
+        // distinto del que luego se lee (ataque de envoltura de firma) — SignedXml lo rechaza con un error
+        // genérico ("Malformed reference element"); aquí se rechaza con el motivo real.
+        string idRaiz = doc.DocumentElement?.GetAttribute("Id") ?? "";
+        if (idRaiz.Length > 0 && doc.SelectNodes($"//*[@Id='{idRaiz}']")!.Count != 1)
+            throw new InvalidOperationException(
+                $"El identificador '{idRaiz}' del elemento raíz de la TSL aparece más de una vez — posible ataque de envoltura de firma; se rechaza.");
+
         var nodosFirma = doc.GetElementsByTagName("Signature", XmlDsigNamespace);
         if (nodosFirma.Count == 0)
             throw new InvalidOperationException($"'{rutaXml}' no trae ninguna firma XML-DSig (<ds:Signature>) — no se puede confiar en su contenido.");
@@ -77,8 +85,12 @@ internal static class VerificadorFirmaTsl
             throw new InvalidOperationException(
                 $"El certificado que firmó la TSL (\"{certificadoFirmante.Subject}\") no fue emitido por el ancla de confianza configurada (\"{raizConfiable.Subject}\") — se rechaza sin verificar la firma criptográfica: confiar en la firma de un certificado no emitido por la autoridad esperada sería tan inseguro como no verificar nada.");
 
-        var signedXml = new SignedXml(doc);
+        // El contexto de SignedXml es el elemento de la firma, no el documento: con new SignedXml(doc) la
+        // firma REAL de INDECOPI daba un falso "no verifica" (RUNBOOK.md 12.38).
+        var signedXml = new SignedXml(nodoFirma);
         signedXml.LoadXml(nodoFirma);
+
+        ExigirQueLaFirmaCubreElDocumentoCompleto(signedXml, doc);
 
         // verifySignatureOnly=true: la validación de la CADENA del
         // certificado ya se hizo arriba, contra el ancla real de INDECOPI
@@ -92,6 +104,31 @@ internal static class VerificadorFirmaTsl
 
         if (!firmaValida)
             throw new InvalidOperationException("La firma XAdES de la TSL NO verifica — el archivo pudo haberse alterado después de firmarse. Se rechaza sin cargar ningún servicio acreditado de su contenido.");
+    }
+
+    /// <summary>
+    /// <see cref="ListaConfianzaIofe"/> vuelve a leer el archivo para extraer los servicios, así que lo único
+    /// que vale es lo que la firma cubre. Se exige que alguna <c>ds:Reference</c> apunte al ELEMENTO RAÍZ
+    /// (<c>URI=""</c> o <c>#Id</c> de la raíz) con la transformación de firma envolvente. (La unicidad del
+    /// <c>Id</c> de la raíz —contra ataques de envoltura de firma— se comprueba antes, en <see cref="VerificarOLanzar"/>.)
+    /// </summary>
+    private static void ExigirQueLaFirmaCubreElDocumentoCompleto(SignedXml signedXml, XmlDocument doc)
+    {
+        var raiz = doc.DocumentElement!;
+        string idRaiz = raiz.GetAttribute("Id");
+
+        bool cubreLaRaiz = false;
+        foreach (Reference referencia in signedXml.SignedInfo!.References)
+        {
+            bool apuntaALaRaiz = referencia.Uri == "" || (idRaiz.Length > 0 && referencia.Uri == "#" + idRaiz);
+            bool esEnvolvente = false;
+            for (int i = 0; i < referencia.TransformChain.Count; i++)
+                if (referencia.TransformChain[i] is XmlDsigEnvelopedSignatureTransform) esEnvolvente = true;
+            if (apuntaALaRaiz && esEnvolvente) cubreLaRaiz = true;
+        }
+        if (!cubreLaRaiz)
+            throw new InvalidOperationException(
+                "La firma de la TSL no cubre el documento completo (ninguna referencia apunta al elemento raíz con la transformación de firma envolvente) — se rechaza: solo lo firmado es confiable.");
     }
 
     private static X509Certificate2? ExtraerCertificadoFirmante(XmlElement nodoFirma)

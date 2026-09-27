@@ -49,8 +49,13 @@ builder.Services.AddHttpClient<VerificadorRevocacionCrl>();
 builder.Services.AddHttpClient<VerificadorRevocacionOcsp>();
 builder.Services.AddSingleton(_ => AlmacenRaicesConfiables.CargarDesdeDirectorio(
     Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "raices")));
-builder.Services.AddSingleton(_ => ListaConfianzaIofe.CargarDesdeArchivo(
-    Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml")));
+// La TSL se carga VERIFICANDO su firma XAdES contra la raíz oficial de INDECOPI (RUNBOOK.md 12.38) y se hace
+// AQUÍ, al arrancar, no de forma perezosa: si el archivo fue alterado o no verifica, el servicio no arranca
+// (fail closed) en vez de fallar en la primera petición o, peor, aceptar una lista adulterada.
+builder.Services.AddSingleton(ListaConfianzaIofe.CargarDesdeArchivoFirmado(
+    Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml"),
+    new System.Security.Cryptography.X509Certificates.X509Certificate2(
+        Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-firmante-raiz.crt"))));
 // Política opcional de EKU/CertificatePolicies (RUNBOOK.md 12.34): sección "PoliticaCertificado" de
 // appsettings — por defecto vacía, o sea solo informativa.
 builder.Services.AddSingleton(builder.Configuration.GetSection(OpcionesPoliticaCertificado.SeccionConfiguracion).Get<OpcionesPoliticaCertificado>()
