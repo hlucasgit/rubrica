@@ -39,6 +39,19 @@ function formatearFecha(iso) {
   catch { return iso; }
 }
 
+// EKU / CertificatePolicies (RUNBOOK 12.34): siempre se muestran los OID que declara el certificado.
+function listaOids(oids) {
+  return oids && oids.length ? oids.map((o) => `<code>${escaparHtml(o)}</code>`).join("<br>") : "(no declarado)";
+}
+
+function textoEstadoPolitica(estado) {
+  switch (estado) {
+    case "Cumple": return "Cumple los OID permitidos";
+    case "NoCumple": return "No cumple los OID permitidos";
+    default: return "Solo informativa (sin OID permitidos configurados)";
+  }
+}
+
 function badgeBool(valor, textoOk = "Sí", textoNo = "No") {
   return `<span class="badge ${valor ? "ok" : "no-ok"}">${valor ? textoOk : textoNo}</span>`;
 }
@@ -115,6 +128,9 @@ function renderizarFirma(f) {
     ["Cadena X.509 hacia una raíz de confianza", badgeBool(f.cadenaValida)],
     ["Acreditado en la TSL de IOFE", badgeBool(f.raizConfiableIofe)],
     ["Propósito de firma (KeyUsage)", badgeBool(f.propositoValido)],
+    ["Uso extendido de clave (EKU)", listaOids(f.extendedKeyUsages)],
+    ["Políticas del certificado (OID)", listaOids(f.politicasCertificado)],
+    ["Política EKU/OID configurada", textoEstadoPolitica(f.estadoPolitica)],
     ["Revocación — OCSP", badgeRevocacion(f.estadoRevocacionOcsp)],
     ["Revocación — CRL", badgeRevocacion(f.estadoRevocacionCrl)],
     ["Revocación — combinado", badgeRevocacion(f.estadoRevocacionCombinado)],
