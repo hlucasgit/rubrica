@@ -275,6 +275,8 @@ public sealed class FirmaLocalDePuntaAPuntaTests : IDisposable
         // Validador INDEPENDIENTE (otro camino de código que el que generó el PDF) sobre lo que quedó guardado.
         var validacion = await e.ValidadorIndependiente.ValidarAsync(guardado);
         Assert.True(validacion.DocumentoValido, string.Join(" | ", validacion.Firmas.SelectMany(f => f.Evidencia)));
+        // El expediente deja constancia de qué TSL se usó y de su vigencia (RUNBOOK 12.40).
+        Assert.Contains(validacion.Firmas.Single().Evidencia, l => l.StartsWith("TSL de IOFE: emitida"));
         Assert.Equal(1, validacion.TotalFirmas);
         var sello = Assert.Single(validacion.SellosDeArchivo);
         Assert.True(sello.Valido, sello.Error);
