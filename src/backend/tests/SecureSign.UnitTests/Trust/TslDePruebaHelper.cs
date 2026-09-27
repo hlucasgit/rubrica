@@ -7,11 +7,17 @@ internal static class TslDePruebaHelper
 {
     private static readonly XNamespace Ns = "http://uri.etsi.org/02231/v2#";
 
-    internal static string EscribirArchivoTemporal(IReadOnlyList<(string Nombre, byte[] CertificadoDer)> serviciosAcreditados)
+    internal static string EscribirArchivoTemporal(
+        IReadOnlyList<(string Nombre, byte[] CertificadoDer)> serviciosAcreditados,
+        DateTimeOffset? emitidaEn = null, DateTimeOffset? proximaActualizacion = null)
     {
         var proveedores = serviciosAcreditados.Select(CrearProveedor).ToArray();
+        var esquema = new XElement(Ns + "SchemeInformation");
+        if (emitidaEn is { } emitida) esquema.Add(new XElement(Ns + "ListIssueDateTime", emitida.UtcDateTime.ToString("o")));
+        if (proximaActualizacion is { } proxima) esquema.Add(new XElement(Ns + "NextUpdate", new XElement(Ns + "dateTime", proxima.UtcDateTime.ToString("o"))));
         var doc = new XDocument(
             new XElement(Ns + "TrustServiceStatusList",
+                esquema,
                 new XElement(Ns + "TrustServiceProviderList", proveedores)));
 
         string ruta = Path.Combine(Path.GetTempPath(), $"tsl-prueba-{Guid.NewGuid():N}.xml");

@@ -83,6 +83,7 @@ public sealed class ValidadorCertificados(
         var certificadosDeLaCadena = chain.ChainElements.Cast<X509ChainElement>().Select(e => e.Certificate.RawData);
         var servicioIofe = listaIofe.BuscarEnCadena(certificadosDeLaCadena);
         bool raizConfiableIofe = servicioIofe is not null;
+        evidencia.Add(listaIofe.DescribirVigencia(DateTimeOffset.UtcNow, TimeSpan.FromDays(14)));
         evidencia.Add(raizConfiableIofe
             ? $"La cadena incluye un servicio acreditado y bajo supervisión en la TSL de IOFE: \"{servicioIofe!.Nombre}\"."
             : "Ningún certificado de la cadena aparece en la TSL de IOFE como servicio acreditado y bajo supervisión.");

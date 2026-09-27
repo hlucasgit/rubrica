@@ -109,7 +109,20 @@ builder.Services.AddSecureSignInternalHttpClient<IIdentidadServiceClient, Identi
 builder.Services.AddSecureSignInternalHttpClient<IAuditoriaServiceClient, AuditoriaServiceClient>(
     new Uri(serviciosInternos["AuditoriaApiUrl"]!), ActorServicio);
 
+builder.Services.AddHostedService<SecureSign.Signature.Api.VigilanteVigenciaTsl>();
+
 var app = builder.Build();
+
+// Vigencia de la TSL (RUNBOOK.md 12.40): se evalúa al arrancar y luego cada VigilanteVigenciaTsl.Intervalo.
+// Con ConfianzaIofe:FallarSiTslVencida=true un servicio con la lista vencida no arranca (por defecto solo avisa:
+// la actualización del archivo es manual y un servicio caído por eso sería peor que uno que avisa).
+{
+    var lista = app.Services.GetRequiredService<ListaConfianzaIofe>();
+    var evaluacion = EvaluadorVigenciaTsl.Evaluar(lista, DateTimeOffset.UtcNow, app.Configuration.GetValue<bool>("ConfianzaIofe:FallarSiTslVencida"));
+    SecureSign.Signature.Api.VigilanteVigenciaTsl.Registrar(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SecureSign.ConfianzaIofe"), evaluacion);
+    if (evaluacion.DebeAbortarElArranque)
+        throw new InvalidOperationException("La TSL de IOFE está vencida y ConfianzaIofe:FallarSiTslVencida=true — se rechaza el arranque. " + evaluacion.Mensaje);
+}
 
 // Las migraciones ya NO se aplican aquí — ver src/Migrator (SecureSign.Migrator)
 // y docker-compose.yml (servicio "securesign-signature-migrate").

@@ -34,11 +34,49 @@ public sealed class ListaConfianzaIofe
     /// <summary>true solo si esta instancia se cargó vía <see cref="CargarDesdeArchivoFirmado"/> y su firma XAdES verificó contra un ancla de confianza real.</summary>
     public bool FirmaVerificada { get; }
 
-    private ListaConfianzaIofe(IReadOnlyList<ServicioAcreditadoIofe> servicios, DateTimeOffset cargadaEn, bool firmaVerificada)
+    /// <summary>Fecha de emisión declarada por la TSL (<c>ListIssueDateTime</c>); null si no la trae o no se pudo leer.</summary>
+    public DateTimeOffset? EmitidaEn { get; }
+
+    /// <summary>
+    /// Fecha en que el emisor promete publicar la siguiente TSL (<c>NextUpdate</c>). Pasada esa fecha la lista
+    /// deja de estar garantizada como vigente (ETSI TS 119 612): un servicio acreditado pudo haber sido
+    /// retirado o suspendido sin que este archivo lo refleje. Null si no la trae.
+    /// </summary>
+    public DateTimeOffset? ProximaActualizacion { get; }
+
+    private ListaConfianzaIofe(IReadOnlyList<ServicioAcreditadoIofe> servicios, DateTimeOffset cargadaEn, bool firmaVerificada,
+        DateTimeOffset? emitidaEn = null, DateTimeOffset? proximaActualizacion = null)
     {
         ServiciosAcreditados = servicios;
         CargadaEn = cargadaEn;
         FirmaVerificada = firmaVerificada;
+        EmitidaEn = emitidaEn;
+        ProximaActualizacion = proximaActualizacion;
+    }
+
+    /// <summary>Estado de vigencia de la lista en <paramref name="ahora"/>; <paramref name="aviso"/> es la anticipación con que se marca "por vencer".</summary>
+    public EstadoVigenciaTsl Vigencia(DateTimeOffset ahora, TimeSpan aviso) =>
+        ProximaActualizacion is not { } proxima ? EstadoVigenciaTsl.Desconocida
+        : ahora > proxima ? EstadoVigenciaTsl.Vencida
+        : proxima - ahora <= aviso ? EstadoVigenciaTsl.PorVencer
+        : EstadoVigenciaTsl.Vigente;
+
+    /// <summary>Línea de evidencia para el expediente de validación (siempre la misma forma, para poder auditarla).</summary>
+    public string DescribirVigencia(DateTimeOffset ahora, TimeSpan aviso)
+    {
+        string emitida = EmitidaEn is { } e ? e.ToString("yyyy-MM-dd") : "(no declarada)";
+        string proxima = ProximaActualizacion is { } p ? p.ToString("yyyy-MM-dd") : "(no declarada)";
+        return $"TSL de IOFE: emitida {emitida}, próxima actualización {proxima} — {Vigencia(ahora, aviso).ToString().ToUpperInvariant()}.";
+    }
+
+    private static (DateTimeOffset? Emitida, DateTimeOffset? Proxima) LeerVigencia(XDocument doc)
+    {
+        static DateTimeOffset? Fecha(string? texto) =>
+            DateTimeOffset.TryParse(texto, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var f) ? f : null;
+
+        var esquema = doc.Descendants(NsTsl + "SchemeInformation").FirstOrDefault();
+        return (Fecha(esquema?.Element(NsTsl + "ListIssueDateTime")?.Value),
+                Fecha(esquema?.Element(NsTsl + "NextUpdate")?.Element(NsTsl + "dateTime")?.Value));
     }
 
     /// <summary>
@@ -46,8 +84,12 @@ public sealed class ListaConfianzaIofe
     /// fixtures sintéticos sin firmar (ver TslDePruebaHelper). El código de
     /// producción real debe usar <see cref="CargarDesdeArchivoFirmado"/>.
     /// </summary>
-    public static ListaConfianzaIofe CargarDesdeArchivo(string rutaXml) =>
-        new(ParsearServicios(XDocument.Load(rutaXml)), DateTimeOffset.UtcNow, firmaVerificada: false);
+    public static ListaConfianzaIofe CargarDesdeArchivo(string rutaXml)
+    {
+        var doc = XDocument.Load(rutaXml);
+        var (emitida, proxima) = LeerVigencia(doc);
+        return new(ParsearServicios(doc), DateTimeOffset.UtcNow, firmaVerificada: false, emitida, proxima);
+    }
 
     /// <summary>
     /// Carga la TSL Y verifica su firma XAdES-BES (envolvente, XML-DSig
@@ -60,7 +102,8 @@ public sealed class ListaConfianzaIofe
     {
         VerificadorFirmaTsl.VerificarOLanzar(rutaXml, raizConfiableFirmaTsl);
         var doc = XDocument.Load(rutaXml);
-        return new ListaConfianzaIofe(ParsearServicios(doc), DateTimeOffset.UtcNow, firmaVerificada: true);
+        var (emitida, proxima) = LeerVigencia(doc);
+        return new ListaConfianzaIofe(ParsearServicios(doc), DateTimeOffset.UtcNow, firmaVerificada: true, emitida, proxima);
     }
 
     private static List<ServicioAcreditadoIofe> ParsearServicios(XDocument doc)
@@ -111,3 +154,17 @@ public sealed class ListaConfianzaIofe
 }
 
 public sealed record ServicioAcreditadoIofe(string Nombre, byte[] CertificadoDer);
+
+public enum EstadoVigenciaTsl
+{
+    /// <summary>La lista no declara <c>NextUpdate</c>: no se puede saber.</summary>
+    Desconocida,
+
+    Vigente,
+
+    /// <summary>Falta poco para <c>NextUpdate</c>: hay que descargar la TSL nueva.</summary>
+    PorVencer,
+
+    /// <summary>Pasó <c>NextUpdate</c>: la lista ya no está garantizada como vigente.</summary>
+    Vencida,
+}
