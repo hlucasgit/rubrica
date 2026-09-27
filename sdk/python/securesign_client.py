@@ -3,6 +3,14 @@ SecureSign Python SDK (referencia) — cliente delgado sobre la API REST
 documentada en docs/05-integracion/manual-integracion-api.md.
 
 Requiere: pip install requests
+
+ADVERTENCIA — DESACTUALIZADO, NO USAR TAL CUAL (ver manual-integracion-api.md,
+"SDK de referencia — NO USAR TAL CUAL"). Este archivo describe una API
+distinta a la real:
+  - base_url por defecto trae /v1 — la API real no tiene versionado de rutas.
+  - El constructor pide (api_key, tenant) — la API real usa un par
+    client_id/client_secret, no una sola llave.
+Corregir estos dos puntos antes de integrar contra un Gateway real.
 """
 import time
 from dataclasses import dataclass
