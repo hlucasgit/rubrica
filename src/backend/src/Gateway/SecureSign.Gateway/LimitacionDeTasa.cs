@@ -33,7 +33,8 @@ public sealed class OpcionesLimitacionDeTasa
 /// Limitación de tasa (ver RUNBOOK.md 12.29): ventana fija por dirección
 /// remota, respuesta <c>429</c> con <c>Retry-After</c>. La partición es por
 /// IP del par TCP: detrás de un balanceador/proxy inverso propio hay que
-/// habilitar <c>ForwardedHeaders</c> para que sea la del cliente real.
+/// activar <c>ReenvioDeCabeceras</c> (ver ReenvioDeCabeceras.cs, RUNBOOK.md 12.36)
+/// para que sea la del cliente real.
 /// </summary>
 public static class LimitacionDeTasa
 {

@@ -16,6 +16,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSecureSignJwtIssuer(builder.Configuration);
 builder.Services.AddSecureSignJwtValidation(builder.Configuration);
 builder.Services.AddLimitacionDeTasaGateway(builder.Configuration);
+builder.Services.AddReenvioDeCabecerasGateway(builder.Configuration);
 builder.Services.Configure<ClientesDemoOptions>(builder.Configuration.GetSection(ClientesDemoOptions.SeccionConfiguracion));
 
 // Cada ruta proxied declara explícitamente su política en appsettings.json
@@ -40,6 +41,9 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddCorsGateway(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
+
+// Primero: la limitación de tasa, HSTS y la redirección HTTPS necesitan la IP y el esquema reales del cliente.
+app.UseReenvioDeCabecerasGateway();
 
 if (app.Environment.IsDevelopment())
 {
