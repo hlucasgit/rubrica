@@ -2,7 +2,9 @@
 
 > **Reescrito el 2026-09-16 contra la API real** (auditado contra `src/backend/src/Gateway`, `src/backend/src/Services/*/Controllers`, y el ejemplo funcional `src/backend/ejemplos-integracion/firmar-documento.sh`). La versión anterior de este manual describía una API distinta — con versionado `/v1`, sandbox, portal de desarrolladores, `X-Api-Key`, shapes de request/response diferentes, y una sección de webhooks completa — que no corresponde a nada implementado. Lo marcado `[roadmap]` abajo es la intención de la versión anterior, no construida todavía; todo lo demás es real y probado (script de ejemplo funcionando de punta a punta contra el stack Docker real).
 >
-> **Actualizado el 2026-09-27** contra el estado real del código a esa fecha: el límite de tasa del endpoint de token (capítulo 3) ya está implementado — el `[roadmap]` de la versión anterior quedó obsoleto y se corrigió; el validador PAdES (5.9) ahora reporta también `extendedKeyUsages`, `politicasCertificado` y `estadoPolitica`; se agregó una nota de CORS (5.13) para integraciones desde el navegador; y se corrigió la sección de SDKs — los archivos en `sdk/` sí existen en el repositorio (a diferencia de lo que decía la versión anterior de este manual), pero describen una API distinta a la real y no deben usarse tal cual (ver el aviso al final de cada archivo y el capítulo final de este manual).
+> **Actualizado el 2026-09-27** contra el estado real del código a esa fecha: el límite de tasa del endpoint de token (capítulo 3) ya está implementado — el `[roadmap]` de la versión anterior quedó obsoleto y se corrigió; el validador PAdES (5.9) ahora reporta también `extendedKeyUsages`, `politicasCertificado` y `estadoPolitica`; se agregó una nota de CORS (5.13) para integraciones desde el navegador; y se corrigió la sección de SDKs — los archivos en `sdk/` sí existen en el repositorio (a diferencia de lo que decía la versión anterior de este manual), pero describían una API distinta a la real y no debían usarse tal cual.
+>
+> **Actualizado el 2026-09-28**: los tres SDK fueron reescritos contra la API real (RUNBOOK.md 12.47) — ya no aplica la advertencia anterior. Ver el capítulo final de este manual y `sdk/README.md`.
 
 ## Capítulo 1 — Introducción
 
@@ -287,12 +289,10 @@ El ejemplo autoritativo de este manual es `src/backend/ejemplos-integracion/firm
 ./firmar-documento.sh http://localhost:8080 ./contrato.pdf
 ```
 
-## SDK de referencia (`sdk/dotnet`, `sdk/javascript`, `sdk/python`) — NO USAR TAL CUAL
+## SDK (`sdk/dotnet`, `sdk/javascript`, `sdk/python`)
 
-> **Corrección (2026-09-27)**: la versión anterior de este manual decía que ningún `SecureSignClient` existía en el repositorio. Es incorrecto — los tres archivos existen (`sdk/dotnet/SecureSignClient.cs`, `sdk/javascript/secureSignClient.js`, `sdk/python/securesign_client.py`), con código real y funcional. El error real es otro: describen una API que **no es la real**, heredada de la versión anterior de este manual:
+> **Corrección (2026-09-28)**: los tres SDK fueron reescritos contra la API real (hallazgo P0-05 del informe de preauditoría INDECOPI/IOFE del 27/09/2026, que pedía elegir entre reescribirlos o excluirlos formalmente del release — se eligió reescribir). Las versiones anteriores describían `/v1`, `apiKey` único y un `Firmante` con campos que el endpoint real nunca aceptó; eso ya no aplica.
 
-- `baseUrl`/`base_url` por defecto apunta a `https://api.securesign.pe/v1` — no existe versionado `/v1` en la API real (capítulo 2).
-- El constructor recibe `apiKey`/`api_key` — la API real usa un par `client_id`/`client_secret` (capítulo 3), no una única llave.
-- El SDK .NET modela `Firmante` con `Nombre`, `DocumentoIdentidad`, `Correo`, `Orden` — el endpoint real `POST /api/firmas/solicitudes` (5.2) solo acepta `{ usuarioId, orden }`; no envía ni acepta nombre, documento de identidad ni correo.
+Los tres (`SecureSignClient` en .NET/JS, `SecureSignClient` en Python) cubren el catálogo completo del capítulo 5: autenticación con caché de token, documentos (registrar/metadata/contenido/descargar firmado), el ciclo de una solicitud de firma (crear/estado/visualizar/posición/firmar/rechazar/pendientes), la señal de identidad de 5.5, y los dos endpoints públicos de validación (5.9). Cada uno tiene timeout configurable, soporte de cancelación idiomático al lenguaje, y una excepción propia que expone el `codigo`/`mensaje` reales del envelope de error (capítulo 6) y el `Retry-After` de un 429.
 
-**No integrar contra estos archivos sin corregirlos primero.** Cada uno lleva ahora una advertencia equivalente en su encabezado. Hasta que exista un SDK real alineado con esta API, integrar con llamadas HTTP directas (como hace el script de la sección anterior) es la única vía soportada y confiable.
+Se probaron de punta a punta contra un doble de prueba que replica el contrato exacto de este manual — no reemplaza una prueba contra el Gateway real como la del script de la sección anterior, pero sí encontró y corrigió un bug real en el SDK JavaScript (ver `sdk/README.md` y RUNBOOK.md 12.47). No cubren evidencia/auditoría ni el flujo de lote — usar HTTP directo para esos, igual que antes.
