@@ -16,6 +16,27 @@ on:
   pull_request:
 
 jobs:
+  # Informe de preauditoría INDECOPI/IOFE (27/09/2026), hallazgo P1-05: no
+  # existía ningún gate dedicado a detección de secretos — SAST (CodeQL) y
+  # SCA (dotnet list package --vulnerable) no cubren ese caso, y el
+  # repositorio es público. Gitleaks escanea el historial completo de cada
+  # push/PR contra su set de reglas por defecto (AWS, GitHub, Slack, Stripe,
+  # JWT, llaves privadas PEM, credenciales genéricas de alta entropía).
+  # `.gitleaks.toml` en la raíz solo excluye el falso positivo conocido y
+  # documentado (`securesign_dev_only`, la contraseña de Postgres de
+  # desarrollo/CI, nunca usada fuera de docker-compose local o este pipeline).
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — detección de secretos
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   backend-build-test-migrate:
     runs-on: ubuntu-latest
 
