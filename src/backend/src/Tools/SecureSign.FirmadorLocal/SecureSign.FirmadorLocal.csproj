@@ -18,6 +18,12 @@
     <Description>Firmador Local de SecureSign: firma documentos con el DNIe u otro token PKCS#11; el PIN nunca sale de este equipo.</Description>
     <Copyright>© 2026 SecureSign</Copyright>
     <NeutralLanguage>es-PE</NeutralLanguage>
+
+    <!-- P1-07 (RUNBOOK.md 12.45): el SDK, por defecto, le agrega su propio sufijo de commit a
+         InformationalVersion (SourceRevisionId) aunque el proceso de build ya pase uno explícito
+         (Construir-Instalador.ps1 -BuildMetadata) — duplicaría el commit dos veces en la misma cadena.
+         Se desactiva para que InformationalVersion sea exactamente "versión+metadato-de-build" y nada más. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

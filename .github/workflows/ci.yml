@@ -237,12 +237,20 @@ jobs:
             Write-Host "::warning::No existe el secreto CODESIGN_PFX_BASE64: el instalador se genera SIN FIRMA de código y no debe distribuirse a usuarios finales (P0-06)."
           }
 
+      # Informe de preauditoría INDECOPI/IOFE, hallazgo P1-07: la versión de PRODUCTO (SemVer, "1.0.0")
+      # y el metadato de BUILD (número de run de CI + commit) son cosas distintas — el número de run no es
+      # una versión funcional, solo trazabilidad (RUNBOOK.md 12.45). El MSI, el ejecutable y el instalador
+      # muestran siempre "1.0.0"; el run/commit va solo en AssemblyInformationalVersion y el manifiesto.
       - name: Construir instalador (publicar, firmar, empaquetar MSI)
         shell: pwsh
         env:
           CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
         run: |
-          $parametros = @{ Version = "1.0.${{ github.run_number }}"; Salida = "artifacts/firmador-local" }
+          $parametros = @{
+            Version = '1.0.0'
+            BuildMetadata = "build.${{ github.run_number }}.sha.${{ github.sha }}"
+            Salida = "artifacts/firmador-local"
+          }
           if ('${{ steps.certificado.outputs.firmar }}' -eq 'true') {
             $parametros['Firmar'] = $true
             $parametros['PfxRuta'] = '${{ steps.certificado.outputs.ruta }}'
@@ -252,7 +260,7 @@ jobs:
       # Máquina limpia (runner nuevo): aquí SÍ se verifica también el protocolo securesign://.
       - name: Probar instalador (instalar, verificar, desinstalar)
         shell: pwsh
-        run: ./src/backend/src/Tools/SecureSign.FirmadorLocal/installer/Probar-Instalador.ps1 -Msi "artifacts/firmador-local/SecureSignFirmadorLocal-1.0.${{ github.run_number }}.msi" -Version "1.0.${{ github.run_number }}"
+        run: ./src/backend/src/Tools/SecureSign.FirmadorLocal/installer/Probar-Instalador.ps1 -Msi "artifacts/firmador-local/SecureSignFirmadorLocal-1.0.0.msi" -Version "1.0.0"
 
       - name: Borrar el certificado del runner
         if: always()

@@ -12,7 +12,12 @@
 #>
 [CmdletBinding()]
 param(
+    # SemVer del PRODUCTO (Package Version del MSI, AssemblyVersion/FileVersion). Cambia solo cuando alguien
+    # decide una nueva versión de SecureSign Firmador Local — nunca automáticamente por CI (RUNBOOK.md 12.45).
     [string]$Version = '1.0.0',
+    # Metadato de trazabilidad (número de build de CI + commit) — va en AssemblyInformationalVersion y en el
+    # manifiesto, NUNCA en la versión de producto ni en el nombre del MSI: build.<n>.sha.<commit>.
+    [string]$BuildMetadata,
     [string]$Salida = (Join-Path $PSScriptRoot '..\..\..\..\..\..\artifacts\firmador-local'),
     [switch]$Firmar,
     [string]$PfxRuta = $env:CODESIGN_PFX_RUTA,
@@ -29,11 +34,12 @@ $msi = Join-Path $Salida "SecureSignFirmadorLocal-$Version.msi"
 if (Test-Path $Salida) { Remove-Item $Salida -Recurse -Force }
 New-Item -ItemType Directory -Path $publicacion -Force | Out-Null
 
-Write-Host "== Publicar (autocontenido, win-x64, versión $Version)"
+$versionInformacional = if ($BuildMetadata) { "$Version+$BuildMetadata" } else { $Version }
+Write-Host "== Publicar (autocontenido, win-x64, versión de producto $Version; informacional $versionInformacional)"
 # En CI se marca la compilación como "de integración continua" (rutas normalizadas, build reproducible).
 $extra = @()
 if ($env:GITHUB_ACTIONS) { $extra += '-p:ContinuousIntegrationBuild=true' }
-dotnet publish $proyecto -c Release -r win-x64 --self-contained true -p:Version=$Version -p:DebugType=None @extra -o $publicacion
+dotnet publish $proyecto -c Release -r win-x64 --self-contained true -p:Version=$Version -p:InformationalVersion=$versionInformacional -p:DebugType=None @extra -o $publicacion
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish falló.' }
 
 $argsFirma = @{}
@@ -58,7 +64,8 @@ Write-Host '== Manifiesto SHA-256'
 $estado = if ($Firmar) { 'FIRMADO con Authenticode (SHA-256, sello de tiempo RFC 3161)' } else { 'SIN FIRMA de código — no distribuir a usuarios finales' }
 $lineas = @(
     '# SecureSign Firmador Local — instalador',
-    "version: $Version",
+    "version de producto: $Version",
+    "metadato de build (trazabilidad, no es la versión del producto): $(if ($BuildMetadata) { $BuildMetadata } else { '(ninguno — build local)' })",
     "commit: $(if ($env:GITHUB_SHA) { $env:GITHUB_SHA } else { (git rev-parse HEAD 2>$null) })",
     "generado: $((Get-Date).ToUniversalTime().ToString('o'))",
     "firma: $estado",
