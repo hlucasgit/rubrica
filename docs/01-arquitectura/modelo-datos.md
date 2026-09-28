@@ -1,4 +1,4 @@
-# Modelo de Datos — SecureSign Perú
+# Modelo de Datos — SecureSign
 
 > **Este es el modelo de datos OBJETIVO/de referencia** (igual que `database/schema.sql`, ver `README.md` del backend) — no es necesariamente el esquema que corre hoy. La implementación real es EF Core Code-First (migraciones en `Persistence/Migrations/` de cada servicio), con su propio esquema generado a partir de las entidades C#, no de este diagrama. Ver "Diferencias conocidas con la implementación real" al final de este documento para los puntos donde ambos divergen — auditado contra el código el 2026-09-16.
 

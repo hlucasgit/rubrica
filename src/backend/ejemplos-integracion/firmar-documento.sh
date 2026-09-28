@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Ejemplo de integración externa con SecureSign Perú: registra un documento,
+# Ejemplo de integración externa con SecureSign: registra un documento,
 # crea una solicitud de firma, la firma y valida el resultado públicamente.
 #
 # Representa lo que haría el backend de un "sistema externo" (SGD, ERP, portal
@@ -27,7 +27,7 @@ fi
 
 if [ ! -f "$ARCHIVO" ]; then
   echo "No existe $ARCHIVO — generando un archivo de prueba."
-  echo "Contrato de demostración SecureSign Perú. Fecha: $(date)" > "$ARCHIVO"
+  echo "Contrato de demostración SecureSign. Fecha: $(date)" > "$ARCHIVO"
 fi
 
 echo "== 1) Autenticación (OAuth2 client_credentials) =="

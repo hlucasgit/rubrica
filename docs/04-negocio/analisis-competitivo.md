@@ -2,7 +2,7 @@
 
 ## 1. Panorama comparativo
 
-| Dimensión | Firma Perú (RENIEC) | Firma ONPE | Llama.pe | Adobe Sign | DocuSign | Viafirma / Signaturit | **SecureSign Perú** |
+| Dimensión | Firma Perú (RENIEC) | Firma ONPE | Llama.pe | Adobe Sign | DocuSign | Viafirma / Signaturit | **SecureSign** |
 |---|---|---|---|---|---|---|---|
 | Alcance | Firma digital nacional gratuita, uso ciudadano/institucional básico | Uso electoral/institucional específico | Firma electrónica simple, foco PyME peruana | Firma global, ecosistema Adobe | Firma global, líder de mercado | Firma electrónica España/LatAm, foco banca/telco | Firma simple + avanzada + digital, foco Perú con ambición regional |
 | Certificado digital IOFE | Sí (propio) | No aplica directamente | No | No (usa su propia PKI global, no IOFE) | No (PKI propia) | Parcial según país | Vía integración con EC acreditada (no reinventa la EC) |
@@ -17,13 +17,13 @@
 
 ## 2. Lectura estratégica por competidor
 
-**Firma Perú / ONPE**: son servicios **estatales de infraestructura**, no productos comerciales — SecureSign Perú no compite con ellos, **se integra sobre ellos** como capa de aplicación y experiencia de usuario (UX de firma, flujos de negocio, evidencia enriquecida, integración API) mientras estas plataformas siguen siendo la fuente de la identidad/certificado oficial cuando se requiere firma digital plena. Este es un mensaje comercial clave: "no reemplazamos a Firma Perú, la hacemos utilizable dentro de cualquier sistema empresarial".
+**Firma Perú / ONPE**: son servicios **estatales de infraestructura**, no productos comerciales — SecureSign no compite con ellos, **se integra sobre ellos** como capa de aplicación y experiencia de usuario (UX de firma, flujos de negocio, evidencia enriquecida, integración API) mientras estas plataformas siguen siendo la fuente de la identidad/certificado oficial cuando se requiere firma digital plena. Este es un mensaje comercial clave: "no reemplazamos a Firma Perú, la hacemos utilizable dentro de cualquier sistema empresarial".
 
-**Llama.pe**: competidor directo más cercano en el segmento PyME peruana con firma electrónica simple/avanzada. Su debilidad relativa es el alcance API/integración y la ausencia de un modelo White Label robusto — el espacio donde SecureSign Perú debe posicionarse con mayor fuerza en el segmento medio-alto (mediana empresa, sector público, educación).
+**Llama.pe**: competidor directo más cercano en el segmento PyME peruana con firma electrónica simple/avanzada. Su debilidad relativa es el alcance API/integración y la ausencia de un modelo White Label robusto — el espacio donde SecureSign debe posicionarse con mayor fuerza en el segmento medio-alto (mediana empresa, sector público, educación).
 
-**Adobe Sign / DocuSign**: líderes globales con producto maduro, pero (a) precio en dólares poco competitivo para el mercado peruano medio, (b) sin PKI local IOFE, (c) sin soporte ni infraestructura local para soberanía de datos exigida por entidades públicas peruanas, (d) sin adaptación al marco normativo peruano específico (clasificación legal de firma según Ley 27269). SecureSign Perú compite por **cumplimiento normativo local + costo + soporte en español/zona horaria + soberanía de datos**, no por paridad de features globales.
+**Adobe Sign / DocuSign**: líderes globales con producto maduro, pero (a) precio en dólares poco competitivo para el mercado peruano medio, (b) sin PKI local IOFE, (c) sin soporte ni infraestructura local para soberanía de datos exigida por entidades públicas peruanas, (d) sin adaptación al marco normativo peruano específico (clasificación legal de firma según Ley 27269). SecureSign compite por **cumplimiento normativo local + costo + soporte en español/zona horaria + soberanía de datos**, no por paridad de features globales.
 
-**Viafirma / Signaturit**: los más sofisticados técnicamente entre los comparables directos (fuertes en banca/telco en España y LatAm), con evidencia robusta y opción on-premise. Su punto débil relativo frente a la propuesta de SecureSign Perú es la ausencia de un **índice de confianza dinámico explícito ligado a la clase de firma** y de un **motor de evidencia con verificación pública por hash-chain** (mantienen la evidencia como activo propietario, no verificable independientemente por el propio cliente o un tercero).
+**Viafirma / Signaturit**: los más sofisticados técnicamente entre los comparables directos (fuertes en banca/telco en España y LatAm), con evidencia robusta y opción on-premise. Su punto débil relativo frente a la propuesta de SecureSign es la ausencia de un **índice de confianza dinámico explícito ligado a la clase de firma** y de un **motor de evidencia con verificación pública por hash-chain** (mantienen la evidencia como activo propietario, no verificable independientemente por el propio cliente o un tercero).
 
 ## 3. Propuesta de posicionamiento
 

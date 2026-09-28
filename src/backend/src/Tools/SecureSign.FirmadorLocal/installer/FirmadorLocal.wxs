@@ -14,14 +14,14 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
       Name="SecureSign Firmador Local"
-      Manufacturer="SecureSign Perú"
+      Manufacturer="SecureSign"
       Version="$(Version)"
       UpgradeCode="33C48550-8D5D-4972-A8BC-62C307489897"
       Scope="perUser"
       Language="1033"
       Compressed="yes">
 
-    <SummaryInformation Description="Firmador Local de SecureSign Perú: firma documentos con el DNIe u otro token, con el PIN siempre en la máquina del firmante." />
+    <SummaryInformation Description="Firmador Local de SecureSign: firma documentos con el DNIe u otro token, con el PIN siempre en la máquina del firmante." />
 
     <MajorUpgrade DowngradeErrorMessage="Ya hay instalada una versión más reciente del Firmador Local." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
@@ -52,7 +52,7 @@
     <!-- Protocolo securesign:// (modo heredado) — mismos valores que escribe `SecureSignFirmadorLocal.exe` con el argumento registrar. -->
     <Component Id="ProtocoloSecureSign" Directory="INSTALLFOLDER" Guid="*">
       <RegistryKey Root="HKCU" Key="Software\Classes\securesign">
-        <RegistryValue Type="string" Value="URL:Protocolo de firma SecureSign Perú" KeyPath="yes" />
+        <RegistryValue Type="string" Value="URL:Protocolo de firma SecureSign" KeyPath="yes" />
         <RegistryValue Name="URL Protocol" Type="string" Value="" />
         <RegistryKey Key="DefaultIcon">
           <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]SecureSignFirmadorLocal.exe&quot;,0" />

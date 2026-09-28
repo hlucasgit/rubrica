@@ -1,5 +1,5 @@
 -- =============================================================
--- SecureSign Perú - Procedimientos y funciones (PostgreSQL - plpgsql)
+-- SecureSign - Procedimientos y funciones (PostgreSQL - plpgsql)
 -- =============================================================
 
 -- ---------------------------------------------------------------

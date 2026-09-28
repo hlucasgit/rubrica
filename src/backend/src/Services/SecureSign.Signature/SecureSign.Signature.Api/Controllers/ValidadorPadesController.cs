@@ -10,7 +10,7 @@ namespace SecureSign.Signature.Api.Controllers;
 /// hallazgo P0-05 ("no debe depender del mismo camino de código que genera
 /// la firma") y RUNBOOK.md 12.12. Sin autenticación, igual que
 /// ValidacionPublicaController: cualquier destinatario de un documento
-/// firmado (no necesariamente un tenant integrado a Rúbrica) debe poder
+/// firmado (no necesariamente un tenant integrado a SecureSign) debe poder
 /// verificar su validez, y el PDF puede venir de cualquier software que
 /// produzca PAdES/CMS estándar, no solo de SecureSign.
 /// </summary>

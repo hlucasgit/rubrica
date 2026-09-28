@@ -1,5 +1,5 @@
 -- =============================================================
--- SecureSign Perú - Índices de rendimiento
+-- SecureSign - Índices de rendimiento
 -- =============================================================
 
 -- Búsquedas frecuentes por tenant (multi-tenancy: casi toda query filtra por TenantId)

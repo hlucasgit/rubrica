@@ -46,7 +46,7 @@ try {
     if ($habiaProtocolo) {
         Write-Host '  SALTADA la verificación del protocolo securesign://: este usuario ya tenía uno registrado (p. ej. una instalación de desarrollo) y no se pisa; se verifica en CI, en una máquina limpia.'
     } else {
-        Comprobar ((Get-Item $claveProtocolo).GetValue('') -eq 'URL:Protocolo de firma SecureSign Perú') 'protocolo securesign:// registrado'
+        Comprobar ((Get-Item $claveProtocolo).GetValue('') -eq 'URL:Protocolo de firma SecureSign') 'protocolo securesign:// registrado'
         Comprobar ($null -ne (Get-Item $claveProtocolo).GetValue('URL Protocol')) 'valor "URL Protocol" presente'
         Comprobar ((Get-Item "$claveProtocolo\shell\open\command").GetValue('') -eq "`"$exe`" `"%1`"") 'comando del protocolo apunta al ejecutable instalado'
     }

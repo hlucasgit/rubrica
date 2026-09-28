@@ -22,7 +22,7 @@ internal sealed class VentanaFirma : Form
 
     public VentanaFirma(string nombreDocumento, long tamanoBytes, string hashHex, IReadOnlyList<string> descripcionesCertificados)
     {
-        Text = "SecureSign Perú — Firmador Local";
+        Text = "SecureSign — Firmador Local";
         ClientSize = new Size(520, 400);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterScreen;

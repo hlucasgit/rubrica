@@ -4,7 +4,7 @@ namespace SecureSign.Trust;
 
 /// <summary>
 /// Motor de confianza IOFE (ver informe de preauditoría INDECOPI/IOFE,
-/// hallazgo P0-01: "RÚBRICA PODRÍA AFIRMAR que la firma fue creada con la
+/// hallazgo P0-01: "SECURESIGN PODRÍA AFIRMAR que la firma fue creada con la
 /// clave privada correspondiente al certificado, pero todavía no puede
 /// afirmar de manera robusta que ese certificado era válido, no estaba
 /// revocado, tenía propósito de firma y pertenecía a una cadena confiable

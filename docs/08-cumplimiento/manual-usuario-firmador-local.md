@@ -4,7 +4,7 @@ Este manual describe el uso real del Firmador Local (`SecureSignFirmadorLocal.ex
 
 ## 1. Qué es el Firmador Local
 
-Una aplicación pequeña que corre en **tu propia computadora** y firma documentos usando tu DNI electrónico (DNIe) u otro token criptográfico conectado a tu equipo. Es el único componente de SecureSign Perú que toca tu tarjeta y tu PIN — el resto de la plataforma (donde vive tu cuenta, tus documentos, el historial de firmas) nunca los ve.
+Una aplicación pequeña que corre en **tu propia computadora** y firma documentos usando tu DNI electrónico (DNIe) u otro token criptográfico conectado a tu equipo. Es el único componente de SecureSign que toca tu tarjeta y tu PIN — el resto de la plataforma (donde vive tu cuenta, tus documentos, el historial de firmas) nunca los ve.
 
 **Lo más importante que debes saber**: tu PIN se usa una sola vez, en tu propia máquina, para firmar, y nunca viaja por internet — ni siquiera hacia los servidores de SecureSign. Esto no es una promesa de marketing: es cómo está construido el programa (ver sección 6).
 
@@ -74,4 +74,4 @@ No. Se usa solo en el momento de la operación de firma y se descarta inmediatam
 
 Cada versión publicada trae un archivo `SHA256SUMS.txt` con la huella digital exacta de cada archivo (ver la política de versiones, [`politica-versiones-y-cambios.md`](politica-versiones-y-cambios.md) sección 2). Tu administrador puede confirmar, antes de instalarlo en tu equipo, que el archivo que tienes coincide exactamente con el publicado.
 
-**Limitación conocida, en proceso de cierre**: el ejecutable todavía no lleva una firma digital de código (Authenticode) — Windows no muestra hoy un "editor verificado" al ejecutarlo. El manifiesto SHA-256 confirma que el archivo no se corrompió en la descarga, pero la autenticidad completa (que fue SecureSign Perú quien lo publicó, y no un tercero) queda pendiente de esa firma de código. Ver [`matriz-cumplimiento-indecopi.md`](matriz-cumplimiento-indecopi.md), hallazgo P0-06.
+**Limitación conocida, en proceso de cierre**: el ejecutable todavía no lleva una firma digital de código (Authenticode) — Windows no muestra hoy un "editor verificado" al ejecutarlo. El manifiesto SHA-256 confirma que el archivo no se corrompió en la descarga, pero la autenticidad completa (que fue SecureSign quien lo publicó, y no un tercero) queda pendiente de esa firma de código. Ver [`matriz-cumplimiento-indecopi.md`](matriz-cumplimiento-indecopi.md), hallazgo P0-06.

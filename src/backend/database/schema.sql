@@ -1,5 +1,5 @@
 -- =============================================================
--- SecureSign Perú - Esquema de base de datos (PostgreSQL 15+)
+-- SecureSign - Esquema de base de datos (PostgreSQL 15+)
 -- =============================================================
 -- Convención: uuid como PK de negocio, bigint identity solo para
 -- tablas append-only de muy alto volumen (EventosAuditoria).

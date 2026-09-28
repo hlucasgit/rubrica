@@ -1,4 +1,4 @@
-// Visor de firma de referencia para SecureSign Perú.
+// Visor de firma de referencia para SecureSign.
 //
 // Es un cliente estático sin build (abrir index.html directamente, o
 // servirlo con cualquier servidor estático) que habla con el Gateway vía

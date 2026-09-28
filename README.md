@@ -1,4 +1,4 @@
-# SecureSign Perú
+# SecureSign
 
 Plataforma integral de firma electrónica y firma digital avanzada, diseñada como **Signature as a Service (SaaS)** integrable (API-first), con arquitectura White Label multi-tenant, motor de evidencia digital y componentes tecnológicos evaluados para protección intelectual ante INDECOPI Perú.
 
@@ -32,7 +32,7 @@ Plataforma integral de firma electrónica y firma digital avanzada, diseñada co
 
 ## Nombre e identidad
 
-- Producto: **SecureSign Perú**
+- Producto: **SecureSign**
 - Plataforma de integración: **SecureSign API Platform**
 - Portal de verificación pública: `verificar.securesign.pe` (dominio de referencia, no registrado)
 - Portal de desarrolladores: `developer.securesign.pe` (dominio de referencia, no registrado)
