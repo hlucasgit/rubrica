@@ -85,20 +85,22 @@ No se configura por `appsettings.json` — se carga desde disco, relativo al bin
 
 **La firma de la TSL se verifica al arrancar** (RUNBOOK 12.38): `Signature.Api` valida la firma XAdES de `tsl-pe.xml` contra la raíz oficial `tsl-firmante-raiz.crt` y **no arranca** si el archivo fue alterado o no verifica (mensaje `La firma XAdES de la TSL NO verifica...`). Por eso al actualizar `tsl-pe.xml` hay que descargar el archivo oficial completo y sin editar; si el servicio no arranca tras actualizarlo, comprobar que sea el archivo oficial íntegro y que la raíz `tsl-firmante-raiz.crt` siga siendo la vigente de INDECOPI. `Signature.Api` registra al arrancar la vigencia de la TSL (`emitida ..., próxima actualización ... — VIGENTE|POR VENCER|VENCIDA`, RUNBOOK 12.40): descargar la TSL nueva cuando aparezca `POR VENCER`; con `ConfianzaIofe:FallarSiTslVencida=true` el servicio no arranca con una lista vencida. La evaluación se repite cada 6 horas mientras el servicio corre (solo registra; para alertar hay que vigilar el registro, no hay métrica ni endpoint de salud).
 
-**Política de EKU/CertificatePolicies** (sección `PoliticaCertificado` de Signature.Api, RUNBOOK 12.34): el motor siempre lee y reporta ambas extensiones del certificado del firmante. Por defecto NO rechaza nada. Para exigirlas cuando se tenga la lista oficial de OID:
+**Política de EKU/CertificatePolicies** (sección `PoliticaCertificado` de Signature.Api, RUNBOOK 12.34/12.49): el motor siempre lee y reporta ambas extensiones del certificado del firmante. Configuración actual (`appsettings.json`, informativa — no rechaza nada):
 
 ```json
 "PoliticaCertificado": {
-  "OidsPoliticaPermitidos": [ "<OID de política IOFE>" ],
+  "OidsPoliticaPermitidos": [ "0.4.0.2042.1.2" ],
   "OidsEkuPermitidos": [],
-  "Exigir": true
+  "Exigir": false
 }
 ```
-(una lista vacía no se evalúa; si ambas están configuradas deben cumplirse las dos; con `Exigir: false` el incumplimiento solo queda en la evidencia). Antes de activar `Exigir`, revisar en la evidencia de validaciones reales qué OID declaran los certificados de firma vigentes, para no rechazar firmantes legítimos.
+`0.4.0.2042.1.2` es el OID real de "Política de Certificado NCP+ con QSCD de acuerdo con ETSI EN 319411-1", tal como lo declara la "Política General de Certificación ECERNEP PERU" v4.0 de RENIEC (perfil Class 3 FIR ALTO, el que usa el DNIe para firma — RUNBOOK 12.49) — no un valor inventado. El mismo documento confirma que `EmailProtection` (el EKU que sí declara el DNIe real) NO es obligatorio en ese perfil, por eso `OidsEkuPermitidos` sigue vacío.
 
-### 2.2.1 Distribución del Firmador Local: instalador MSI y firma de código (RUNBOOK 12.35)
+(una lista vacía no se evalúa; si ambas están configuradas deben cumplirse las dos; con `Exigir: false` el incumplimiento solo queda en la evidencia). Antes de activar `Exigir`, probar contra un DNIe físico real con esta configuración exacta — no se hizo todavía en esta sesión (sin hardware/Docker disponibles) — y confirmar que el OID aplica igual a cualquier otra Entidad de Certificación acreditada de la IOFE que se quiera aceptar, no solo RENIEC.
 
-El job `release-manifest-firmador` de CI (push a `main`) construye `SecureSignFirmadorLocal-1.0.<n>.msi` (por usuario, runtime incluido), lo prueba instalando y desinstalando en un runner limpio y publica el MSI con `SHA256SUMS-instalador.txt`. **Para que el MSI salga firmado**, cargar en los secretos del repositorio `CODESIGN_PFX_BASE64` (el PFX del certificado de firma de código en base64) y `CODESIGN_PFX_PASSWORD`; sin ellos el MSI se genera SIN FIRMA, el manifiesto lo dice y CI emite una advertencia — no distribuirlo a usuarios finales. Construir en local: `installer/Construir-Instalador.ps1 -Version 1.0.5 [-Firmar -PfxRuta cert.pfx]` con la variable `CODESIGN_PFX_PASSWORD` (requiere `wix` 5.0.x y el Windows SDK). Instalación silenciosa en los equipos: `msiexec /i SecureSignFirmadorLocal-<versión>.msi /qn` (agregar `INICIAR_CON_WINDOWS=0` para no registrar el inicio automático).
+### 2.2.1 Distribución del Firmador Local: instalador MSI y firma de código (RUNBOOK 12.35/12.45)
+
+El job `release-manifest-firmador` de CI (push a `main`) construye `SecureSignFirmadorLocal-1.0.0.msi` (por usuario, runtime incluido; `1.0.0` es la versión de producto, fija hasta que se decida una nueva — el número de build de CI y el commit van solo en el manifiesto y en `InformationalVersion`, RUNBOOK 12.45), lo prueba instalando y desinstalando en un runner limpio y publica el MSI con `SHA256SUMS-instalador.txt`. **Para que el MSI salga firmado**, cargar en los secretos del repositorio `CODESIGN_PFX_BASE64` (el PFX del certificado de firma de código en base64) y `CODESIGN_PFX_PASSWORD`; sin ellos el MSI se genera SIN FIRMA, el manifiesto lo dice y CI emite una advertencia — no distribuirlo a usuarios finales. Construir en local: `installer/Construir-Instalador.ps1 [-Firmar -PfxRuta cert.pfx]` (versión de producto `1.0.0` por defecto) con la variable `CODESIGN_PFX_PASSWORD` (requiere `wix` 5.0.x y el Windows SDK). Instalación silenciosa en los equipos: `msiexec /i SecureSignFirmadorLocal-1.0.0.msi /qn` (agregar `INICIAR_CON_WINDOWS=0` para no registrar el inicio automático).
 
 Si un antivirus bloquea el instalador o el programa en los equipos de los usuarios, ver [`compatibilidad-antivirus.md`](compatibilidad-antivirus.md) (permitir por editor, por hash o por ruta, y cómo enviar falsos positivos).
 

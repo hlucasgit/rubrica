@@ -130,4 +130,25 @@ public sealed class AnalizadorPoliticaCertificadoTests
         var opciones = new OpcionesPoliticaCertificado { Exigir = true };
         Assert.Equal(EstadoPolitica.SoloInformativa, AnalizadorPoliticaCertificado.Analizar(Certificado(), opciones).Estado);
     }
+
+    /// <summary>
+    /// RUNBOOK.md 12.49 — OID real de "Política General de Certificación ECERNEP PERU" v4.0 (RENIEC), perfil
+    /// "Class 3 FIR ALTO" (DNIe, firma): CertificatePolicies trae 0.4.0.2042.1.2 (ETSI EN 319 411-1, NCP+ con
+    /// QSCD) junto al propio de RENIEC, y ExtendedKeyUsage trae EmailProtection como no obligatorio/no crítico
+    /// — exactamente lo que appsettings.json de Signature.Api configura hoy (informativo, Exigir=false).
+    /// </summary>
+    [Fact]
+    public void El_perfil_real_de_firma_del_DNIe_segun_la_CP_de_RENIEC_cumple_con_la_configuracion_productiva()
+    {
+        var opciones = new OpcionesPoliticaCertificado { OidsPoliticaPermitidos = ["0.4.0.2042.1.2"] };
+        var certificado = Certificado(
+            eku: ["1.3.6.1.5.5.7.3.4"],
+            politicas: ["1.3.6.1.4.1.35300.2.1.3.1.0.101.1000.0", "0.4.0.2042.1.2"]);
+
+        var datos = AnalizadorPoliticaCertificado.Analizar(certificado, opciones);
+
+        Assert.Equal(EstadoPolitica.Cumple, datos.Estado);
+        Assert.Contains("0.4.0.2042.1.2", datos.PoliticasCertificado);
+        Assert.Contains("1.3.6.1.5.5.7.3.4", datos.ExtendedKeyUsages);
+    }
 }

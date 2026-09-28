@@ -6,10 +6,23 @@ namespace SecureSign.Trust;
 /// <summary>
 /// Política opcional sobre ExtendedKeyUsage y CertificatePolicies del certificado del firmante (informe de
 /// preauditoría INDECOPI/IOFE, sección 8: "no basta encontrar 'FIR' — falta verificar EKU/CertificatePolicies").
-/// Por defecto <b>informativa</b>: el motor SIEMPRE lee y reporta ambas extensiones, pero no rechaza nada — no
-/// existe todavía una referencia confiable del OID de política IOFE, y el DNIe real declara un EKU ("Secure
-/// Email") que no es específico de firma de documentos, así que exigirlos hoy produciría falsos rechazos
-/// (RUNBOOK.md 12.9). Cuando se tenga la lista oficial, basta con llenar los OID y poner <see cref="Exigir"/>.
+/// Por defecto <b>informativa</b>: el motor SIEMPRE lee y reporta ambas extensiones, pero no rechaza nada.
+///
+/// Fuente oficial encontrada (RUNBOOK.md 12.49): "Política General de Certificación ECERNEP PERU" v4.0
+/// (RENIEC, <c>https://pki.reniec.gob.pe/docs/docsrepo/CP_ECERNEP_PERU_CA_ROOT_3_v4-0-.pdf</c>), perfil
+/// "Class 3 FIR ALTO" (el que corresponde al DNIe para firma) — <c>Certificate Policies</c> trae DOS
+/// identificadores: el propio de RENIEC (<c>1.3.6.1.4.1.35300.2.1.3.1.0.101.1000.0</c>, "Política General de
+/// Certificación") y el genérico ETSI EN 319 411-1 <c>0.4.0.2042.1.2</c> ("NCP+ con QSCD" — Normalized
+/// Certificate Policy con dispositivo cualificado de creación de firma, el chip del DNIe). El mismo perfil
+/// declara <c>ExtendedKeyUsage: EmailProtection (1.3.6.1.5.5.7.3.4)</c> con Obligatorio=No, Crítica=No — el
+/// propio documento de RENIEC confirma que ese EKU NO es obligatorio ni específico de firma en el perfil de
+/// firma, lo que respalda con una fuente citable la decisión ya tomada en RUNBOOK.md 12.9/12.34 de no exigirlo.
+/// `appsettings.json` de Signature.Api ya trae <c>0.4.0.2042.1.2</c> configurado en
+/// <see cref="OidsPoliticaPermitidos"/> (reporta Cumple/NoCumple en la evidencia), con <see cref="Exigir"/> en
+/// false — la Política General de Certificación cubre solo ECERNEP/RENIEC, no necesariamente cada Entidad de
+/// Certificación acreditada de la IOFE, y no se ha podido probar en vivo contra un DNIe físico con esta
+/// configuración en esta sesión (Docker no disponible); exigir sigue siendo una decisión pendiente de
+/// confirmación operativa, no de falta de fuente.
 /// </summary>
 public sealed class OpcionesPoliticaCertificado
 {
