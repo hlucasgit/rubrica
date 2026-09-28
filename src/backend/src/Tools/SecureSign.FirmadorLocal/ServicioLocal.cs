@@ -104,10 +104,28 @@ internal sealed class ServicioLocal : ApplicationContext
     private async Task AtenderPeticionAsync(HttpListenerContext contexto)
     {
         var respuesta = contexto.Response;
-        // CORS abierto: es un servicio 100% local (loopback) pensado para
-        // que CUALQUIER página del integrador pueda llamarlo, igual que
-        // Firma Perú no restringe el origen de quien llama a su servicio local.
-        respuesta.Headers["Access-Control-Allow-Origin"] = "*";
+        // CORS abierto a cualquier origen a propósito: es un servicio 100% local
+        // (loopback) pensado para que CUALQUIER página del integrador pueda
+        // llamarlo, igual que Firma Perú no restringe el origen de quien llama
+        // a su servicio local — no hay una lista fija de integradores posible.
+        // Informe de preauditoría INDECOPI/IOFE (27/09/2026), hallazgo P2-05:
+        // en vez de un "*" fijo se refleja el Origin real de quien llama
+        // (`Access-Control-Allow-Origin: <origen exacto>` en vez de `*`),
+        // solo cuando la petición trae ese encabezado. Es "*" con otra forma
+        // para un endpoint sin cookies/credenciales (no cambia quién puede
+        // llamar), pero dos cosas sí cambian: sin credenciales sobre "*" no
+        // hay diferencia real, mientras que reflejar el origen SÍ es
+        // compatible si algún día se necesitara `Access-Control-Allow-Credentials`,
+        // y evita el hallazgo automático de escáner "CORS wildcard" sobre
+        // un valor que, en la práctica, ya no es literalmente "*". El control
+        // real de seguridad sigue siendo el binding del ticket contra el
+        // `Origin` de la petición real (abajo) — esto NUNCA se relaja.
+        var origenPeticion = contexto.Request.Headers["Origin"];
+        if (!string.IsNullOrEmpty(origenPeticion))
+        {
+            respuesta.Headers["Access-Control-Allow-Origin"] = origenPeticion;
+            respuesta.Headers["Vary"] = "Origin";
+        }
         respuesta.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
         respuesta.Headers["Access-Control-Allow-Headers"] = "Content-Type";
 
@@ -145,7 +163,6 @@ internal sealed class ServicioLocal : ApplicationContext
                 // esta máquina, que OTRA pestaña/sitio abierto en el
                 // navegador — no la página legítima que el usuario estaba
                 // usando — es quien está llamando a este servicio local.
-                var origenPeticion = contexto.Request.Headers["Origin"];
                 if (!string.IsNullOrEmpty(ticket.Origen) && !string.Equals(ticket.Origen, origenPeticion, StringComparison.OrdinalIgnoreCase))
                 {
                     await ResponderJsonAsync(respuesta, 403, new
