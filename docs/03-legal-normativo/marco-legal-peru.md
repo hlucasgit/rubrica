@@ -11,11 +11,11 @@ Establece la equivalencia funcional entre la firma manuscrita y la firma digital
 
 ### Reglamento de la Ley de Firmas Digitales (D.S. N° 052-2008-PCM y modificatorias)
 
-Define los requisitos técnicos y de procedimiento para las Entidades de Certificación, Registro y Verificación acreditadas por INDECOPI, los formatos de certificado (X.509 v3), y los mecanismos de revocación (CRL/OCSP). **Implicación de diseño**: SecureSign Perú, para emitir "firma digital" con presunción legal plena, debe o bien (a) integrarse como sistema cliente de una EC ya acreditada (p. ej., RENIEC, Certicámara Perú u otra EC autorizada), delegando la emisión y custodia de certificados, o (b) buscar su propia acreditación como EC/ERV ante INDECOPI — un proceso regulatorio independiente del desarrollo de software. El modelo de arquitectura contempla ambos caminos mediante el Servicio de Certificados como capa de abstracción.
+Define los requisitos técnicos y de procedimiento para las Entidades de Certificación, Registro y Verificación acreditadas por INDECOPI, los formatos de certificado (X.509 v3), y los mecanismos de revocación (CRL/OCSP). **Implicación de diseño**: SecureSign, para emitir "firma digital" con presunción legal plena, debe o bien (a) integrarse como sistema cliente de una EC ya acreditada (p. ej., RENIEC, Certicámara Perú u otra EC autorizada), delegando la emisión y custodia de certificados, o (b) buscar su propia acreditación como EC/ERV ante INDECOPI — un proceso regulatorio independiente del desarrollo de software. El modelo de arquitectura contempla ambos caminos mediante el Servicio de Certificados como capa de abstracción.
 
 ### Infraestructura Oficial de Firma Electrónica (IOFE)
 
-Ecosistema de confianza peruano bajo el cual operan las EC/ERV acreditadas. SecureSign Perú se posiciona como una **plataforma de aplicación (Trust Service Application)** que consume servicios IOFE (certificados, OCSP, sellado de tiempo) en lugar de sustituirlos, salvo que se decida perseguir la acreditación propia como EC — decisión de negocio con implicancias regulatorias y de capital significativas que excede el alcance de este documento técnico.
+Ecosistema de confianza peruano bajo el cual operan las EC/ERV acreditadas. SecureSign se posiciona como una **plataforma de aplicación (Trust Service Application)** que consume servicios IOFE (certificados, OCSP, sellado de tiempo) en lugar de sustituirlos, salvo que se decida perseguir la acreditación propia como EC — decisión de negocio con implicancias regulatorias y de capital significativas que excede el alcance de este documento técnico.
 
 ### INDECOPI
 
@@ -32,7 +32,7 @@ El sistema procesa datos personales sensibles (documento de identidad, biometrí
 
 ## 2. Estándares internacionales de referencia
 
-| Estándar | Uso en SecureSign Perú |
+| Estándar | Uso en SecureSign |
 |---|---|
 | **ETSI EN 319 xxx** (marco general de servicios de confianza) | Referencia de buenas prácticas para el diseño de los servicios de Firma, Certificados y Evidencia, aun sin operar bajo jurisdicción eIDAS |
 | **eIDAS (UE)** | Modelo de referencia para la clasificación de niveles de firma (simple/avanzada/cualificada) — análogo funcional a la clasificación de la Ley 27269, útil si se busca interoperabilidad con contrapartes europeas |
@@ -44,7 +44,7 @@ El sistema procesa datos personales sensibles (documento de identidad, biometrí
 
 ## 3. Brechas regulatorias a resolver antes de comercialización (no técnicas)
 
-1. Definir si SecureSign Perú operará como **aplicación cliente de una EC acreditada existente** o buscará su propia acreditación IOFE — decisión legal/estratégica previa al desarrollo de producción.
+1. Definir si SecureSign operará como **aplicación cliente de una EC acreditada existente** o buscará su propia acreditación IOFE — decisión legal/estratégica previa al desarrollo de producción.
 2. Registro del banco de datos personales ante la ANPD.
 3. Términos de servicio y política de privacidad revisados por abogado especializado, incluyendo cláusulas de valor probatorio de la evidencia generada (relevante en un eventual litigio).
 4. Evaluación de si el módulo de continuidad conductual (innovación #3) requiere una base de licitud reforzada por tratarse de datos derivados de comportamiento, conforme a criterios de la ANPD.

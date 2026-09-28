@@ -14,7 +14,7 @@ using SecureSign.Tsa;
 namespace SecureSign.FirmadorLocal;
 
 /// <summary>
-/// Firmador Local de SecureSign Perú — el equivalente al "FirmadorClienteWeb"
+/// Firmador Local de SecureSign — el equivalente al "FirmadorClienteWeb"
 /// de Firma Perú, pero como un único ejecutable .NET autocontenido (sin
 /// Java, sin ClickOnce, sin plugins de navegador).
 ///
@@ -81,8 +81,8 @@ internal static class Program
 
         if (args.Length > 0 && args[0].StartsWith("securesign://", StringComparison.OrdinalIgnoreCase))
         {
-            Console.Title = "SecureSign Perú — Firmador Local";
-            Console.WriteLine("=== SecureSign Perú — Firmador Local (modo heredado, securesign://) ===");
+            Console.Title = "SecureSign — Firmador Local";
+            Console.WriteLine("=== SecureSign — Firmador Local (modo heredado, securesign://) ===");
             Console.WriteLine();
             try
             {
@@ -95,7 +95,7 @@ internal static class Program
             catch (Exception ex)
             {
                 Console.WriteLine($"ERROR: {ex.Message}");
-                MessageBox.Show(ex.Message, "SecureSign Perú — Error al firmar", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "SecureSign — Error al firmar", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return 1;
             }
         }
@@ -107,7 +107,7 @@ internal static class Program
         }
         catch (ArgumentException ex)
         {
-            MessageBox.Show(ex.Message, "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(ex.Message, "SecureSign — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
 
@@ -151,7 +151,7 @@ internal static class Program
         var rutaExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule!.FileName;
 
         using var claveProtocolo = Registry.CurrentUser.CreateSubKey(@"Software\Classes\securesign");
-        claveProtocolo.SetValue(string.Empty, "URL:Protocolo de firma SecureSign Perú");
+        claveProtocolo.SetValue(string.Empty, "URL:Protocolo de firma SecureSign");
         claveProtocolo.SetValue("URL Protocol", string.Empty);
 
         using var claveIcono = claveProtocolo.CreateSubKey("DefaultIcon");
@@ -381,7 +381,7 @@ internal static class Program
             return new ResultadoFirma(false, $"SecureSign rechazó el resultado (HTTP {(int)respuesta.StatusCode}): {textoRespuesta}", null);
 
         void MostrarExito() =>
-            MessageBox.Show($"El documento \"{nombreArchivo}\" se firmó correctamente.", "SecureSign Perú", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"El documento \"{nombreArchivo}\" se firmó correctamente.", "SecureSign", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         if (hiloUi is not null) hiloUi.Invoke(MostrarExito);
         else MostrarExito();

@@ -11,12 +11,12 @@
 
     <!-- Metadatos del ejecutable (propiedades de archivo, pestaña "Detalles"). Un binario sin editor, producto ni
          descripción es exactamente lo que las heurísticas de los antivirus puntúan peor — ver RUNBOOK.md 12.37. -->
-    <Company>SecureSign Perú</Company>
-    <Authors>SecureSign Perú</Authors>
+    <Company>SecureSign</Company>
+    <Authors>SecureSign</Authors>
     <Product>SecureSign Firmador Local</Product>
     <AssemblyTitle>SecureSign Firmador Local</AssemblyTitle>
-    <Description>Firmador Local de SecureSign Perú: firma documentos con el DNIe u otro token PKCS#11; el PIN nunca sale de este equipo.</Description>
-    <Copyright>© 2026 SecureSign Perú</Copyright>
+    <Description>Firmador Local de SecureSign: firma documentos con el DNIe u otro token PKCS#11; el PIN nunca sale de este equipo.</Description>
+    <Copyright>© 2026 SecureSign</Copyright>
     <NeutralLanguage>es-PE</NeutralLanguage>
   </PropertyGroup>
 

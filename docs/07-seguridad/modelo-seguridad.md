@@ -35,7 +35,7 @@
 - El hash-chain append-only real vive en **`Evidencias`** (`EventoEvidencia`), no en `EventosAuditoria` — corrección: una versión anterior de este documento (y de `docs/01-arquitectura/modelo-datos.md`) describía el hash-chain en la tabla equivocada. `EventosAuditoria` (RUNBOOK.md 12.16) es, a propósito, un registro append-only simple SIN cadena de hashes — separado deliberadamente de Evidencias porque son conceptos distintos (auditoría técnica/de seguridad vs. trazabilidad legal de un documento/firma concreto).
 - `[objetivo]` El enforcement de "append-only" hoy es solo por convención de la aplicación (nadie en el código llama UPDATE/DELETE sobre estas tablas) — **no** hay políticas de rol de PostgreSQL (`REVOKE`/`GRANT`) que lo impongan a nivel de motor de base de datos. `database/schema.sql`/`stored-procedures.sql` son diseño de referencia, no lo que corre (la implementación real es EF Core Code-First).
 - `[objetivo — no implementado]` Logs de infraestructura a un SIEM centralizado con retención WORM.
-- `[objetivo — no implementado]` Registro visible para el tenant de accesos de soporte técnico de SecureSign Perú a sus datos.
+- `[objetivo — no implementado]` Registro visible para el tenant de accesos de soporte técnico de SecureSign a sus datos.
 
 ## 6. Autenticación y autorización
 

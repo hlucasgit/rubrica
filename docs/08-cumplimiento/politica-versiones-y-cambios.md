@@ -1,10 +1,10 @@
 # Política de versiones, actualización y gestión de cambios
 
-INDECOPI exige que un Software de Firma Digital acreditado informe sus modificaciones antes de implementarlas y esté sujeto a auditorías periódicas de seguimiento (informe de preauditoría, sección 2). Esta política define cómo SecureSign Perú versiona, libera y documenta cada cambio — es la base que hace posible cumplir esa exigencia, no un procedimiento aparte del desarrollo normal.
+INDECOPI exige que un Software de Firma Digital acreditado informe sus modificaciones antes de implementarlas y esté sujeto a auditorías periódicas de seguimiento (informe de preauditoría, sección 2). Esta política define cómo SecureSign versiona, libera y documenta cada cambio — es la base que hace posible cumplir esa exigencia, no un procedimiento aparte del desarrollo normal.
 
 ## 1. Esquema de versionado
 
-SecureSign Perú usa **versionado semántico** (`MAYOR.MENOR.PARCHE`) por componente distribuible:
+SecureSign usa **versionado semántico** (`MAYOR.MENOR.PARCHE`) por componente distribuible:
 
 - **`SecureSign.FirmadorLocal`** — el único componente que INDECOPI evalúa como *software distribuido al usuario final* (informe, alcance recomendado v1.0). Su versión es la que figura en el expediente de acreditación.
 - **Backend (Gateway + 7 servicios)** — versionado como una unidad (mismo repositorio, mismo `docker-compose.yml`), porque no se distribuye al usuario final y no es objeto directo de la acreditación SFD, aunque sí de la evaluación de seguridad/interoperabilidad.
@@ -26,7 +26,7 @@ Cada versión candidata a evaluación (o ya acreditada) debe poder reconstruirse
 - **Commit exacto**: cada release corresponde a un commit de `main` (`git rev-parse HEAD`), nunca a un estado de trabajo intermedio.
 - **SBOM**: generado automáticamente en cada build de CI (`.github/workflows/ci.yml`, ver [RUNBOOK.md 12.18](../../src/backend/RUNBOOK.md)) — inventario completo de dependencias de terceros, formato CycloneDX, versionado con el `sha` del commit.
 - **Manifiesto de artefacto**: `SHA256SUMS.txt`, generado en el mismo build, con el hash de cada archivo publicado del Firmador Local — permite a un tercero (INDECOPI, un auditor, el propio usuario) confirmar que el binario que tiene en su máquina es exactamente el que se evaluó.
-- **Pendiente para cierre completo de P0-06**: firma Authenticode del ejecutable — hasta que exista, el manifiesto SHA-256 prueba integridad (nada se corrompió en tránsito) pero NO autenticidad (no prueba criptográficamente que SecureSign Perú lo publicó). Ver matriz de cumplimiento, hallazgo P0-06.
+- **Pendiente para cierre completo de P0-06**: firma Authenticode del ejecutable — hasta que exista, el manifiesto SHA-256 prueba integridad (nada se corrompió en tránsito) pero NO autenticidad (no prueba criptográficamente que SecureSign lo publicó). Ver matriz de cumplimiento, hallazgo P0-06.
 
 ## 3. Qué NO puede cambiar sin pasar por este proceso
 
@@ -49,7 +49,7 @@ Un cambio en cualquier otro componente (SDKs, documentación, servicios de negoc
 
 ## 5. Política de actualización del Firmador Local
 
-El Firmador Local corre en la máquina del usuario final, fuera del control directo de SecureSign Perú entre sesiones. Mientras no exista firma Authenticode (sección 2), **no se implementa un mecanismo de auto-actualización** — sería introducir una superficie de ataque (una actualización no firmada es indistinguible de malware) sin la contramedida que la haría segura. Esto es una decisión deliberada, no una omisión: el roadmap correcto es primero firma de código, después actualización automática que verifique esa firma antes de reemplazar el binario en ejecución — nunca al revés.
+El Firmador Local corre en la máquina del usuario final, fuera del control directo de SecureSign entre sesiones. Mientras no exista firma Authenticode (sección 2), **no se implementa un mecanismo de auto-actualización** — sería introducir una superficie de ataque (una actualización no firmada es indistinguible de malware) sin la contramedida que la haría segura. Esto es una decisión deliberada, no una omisión: el roadmap correcto es primero firma de código, después actualización automática que verifique esa firma antes de reemplazar el binario en ejecución — nunca al revés.
 
 Hasta entonces, la distribución de una versión nueva es manual: el usuario descarga el nuevo `.exe` desde el canal oficial que se defina, puede verificar su hash contra `SHA256SUMS.txt` publicado, y lo reemplaza manualmente.
 

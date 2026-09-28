@@ -52,7 +52,7 @@ internal sealed class ServicioLocal : ApplicationContext
         {
             Icon = System.Drawing.SystemIcons.Shield,
             Visible = true,
-            Text = $"SecureSign Perú — Firmador Local (puerto {_puerto})",
+            Text = $"SecureSign — Firmador Local (puerto {_puerto})",
         };
         var menu = new ContextMenuStrip();
         menu.Items.Add($"Escuchando en http://127.0.0.1:{_puerto}/", null, (_, _) => { }).Enabled = false;
@@ -62,7 +62,7 @@ internal sealed class ServicioLocal : ApplicationContext
         _icono.DoubleClick += (_, _) =>
             MessageBox.Show(
                 $"El Firmador Local está activo, escuchando en http://127.0.0.1:{_puerto}/.\n\nPuedes cerrar esta app desde el menú del ícono (clic derecho → Salir).",
-                "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                "SecureSign — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         try
         {
@@ -74,7 +74,7 @@ internal sealed class ServicioLocal : ApplicationContext
             MessageBox.Show(
                 $"No se pudo iniciar el Firmador Local en el puerto {_puerto} — ¿ya hay una instancia corriendo, o el puerto está ocupado por otra app?\n\n" +
                 $"Prueba con otro puerto: SecureSignFirmadorLocal.exe --puerto <número>\n\n{ex.Message}",
-                "SecureSign Perú — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                "SecureSign — Firmador Local", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Salir();
             return;
         }

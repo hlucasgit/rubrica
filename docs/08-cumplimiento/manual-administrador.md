@@ -1,4 +1,4 @@
-# Manual de administrador — SecureSign Perú
+# Manual de administrador — SecureSign
 
 Cubre despliegue, configuración y operación real de los 7 servicios + Gateway + Firmador Local. Grounded en el código actual, no en la arquitectura objetivo de `docs/01-07` — cada clave de configuración citada aquí existe hoy en el repositorio.
 

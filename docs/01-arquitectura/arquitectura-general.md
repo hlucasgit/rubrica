@@ -1,4 +1,4 @@
-# Arquitectura General — SecureSign Perú
+# Arquitectura General — SecureSign
 
 > **Este documento describe la arquitectura OBJETIVO** (visión completa, multi-tenant, on-premise/nube, 10 servicios) — no el estado actual del código. Para lo que REALMENTE está construido, probado y verificado hoy, ver `src/backend/README.md` (tabla de honestidad) y `src/backend/RUNBOOK.md` (cada fase ejecutada), o `docs/08-cumplimiento/matriz-cumplimiento-indecopi.md` (que sí refleja el estado real, auditado contra el código). Las secciones 1, 3 y 4 (principios, servicios, comunicación) se auditaron contra el código el 2026-09-16 — ver las notas `[objetivo]` en esas secciones para lo que NO está construido. Las secciones 5 (stack) en adelante mezclan piezas verificadas (marcadas) con diseño de infraestructura a futuro (Kubernetes, Redis, Vault, frontend Angular/React, despliegue on-premise) que no se auditó exhaustivamente aquí — tratar como plan, no como inventario del código actual.
 

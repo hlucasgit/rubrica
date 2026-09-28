@@ -1,4 +1,4 @@
-// Rúbrica Validador — visor independiente de referencia.
+// SecureSign Validador — visor independiente de referencia.
 //
 // Cliente estático sin build, sin autenticación (POST /api/validador/pdf es
 // público a propósito — ver RUNBOOK.md 12.12). Solo muestra lo que el

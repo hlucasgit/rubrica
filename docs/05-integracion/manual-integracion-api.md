@@ -221,7 +221,7 @@ Sin autenticación — endpoint público.
   "firmantes": [ { "orden": 1, "estado": "Firmado" } ]
 }
 ```
-No incluye `nombre`, `hash`, `documento` ni `cadenaConfianza` — solo el veredicto y el estado de cada firmante por orden. Para un expediente completo de validación PAdES (certificados, cadena de confianza IOFE, revocación, sello de tiempo), ver `POST /api/validador/pdf` (también público, recibe el PDF directamente — ver RUNBOOK.md 12.12) y el visor "Rúbrica Validador" en `src/frontend/validador-web`.
+No incluye `nombre`, `hash`, `documento` ni `cadenaConfianza` — solo el veredicto y el estado de cada firmante por orden. Para un expediente completo de validación PAdES (certificados, cadena de confianza IOFE, revocación, sello de tiempo), ver `POST /api/validador/pdf` (también público, recibe el PDF directamente — ver RUNBOOK.md 12.12) y el visor "SecureSign Validador" en `src/frontend/validador-web`.
 
 Cada objeto de firma que devuelve `POST /api/validador/pdf` incluye, además de los campos criptográficos (`firmaCriptograficaValida`, `certificadoVigente`, `cadenaValida`, `raizConfiableIofe`, `propositoValido`, `estadoRevocacionOcsp/Crl/Combinado`, `estadoFinal`, `evidencia`): `extendedKeyUsages` y `politicasCertificado` (los OID que declara el certificado del firmante, siempre reportados) y `estadoPolitica` (`SoloInformativa` por defecto, o `Cumple`/`NoCumple` si el operador configuró una lista de OID permitidos — ver RUNBOOK.md 12.34). Ninguno de los tres afecta `estadoFinal` salvo que el operador haya activado la exigencia.
 

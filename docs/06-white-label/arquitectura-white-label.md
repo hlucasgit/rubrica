@@ -4,7 +4,7 @@
 
 ## 1. Objetivo
 
-Permitir que un sistema externo (SGD gubernamental, portal universitario, ERP empresarial) ofrezca firma electrónica **bajo su propia identidad institucional**, sin que el usuario final perciba que existe un proveedor externo, preservando al mismo tiempo la seguridad criptográfica, la evidencia probatoria y la trazabilidad centralizada que gestiona SecureSign Perú.
+Permitir que un sistema externo (SGD gubernamental, portal universitario, ERP empresarial) ofrezca firma electrónica **bajo su propia identidad institucional**, sin que el usuario final perciba que existe un proveedor externo, preservando al mismo tiempo la seguridad criptográfica, la evidencia probatoria y la trazabilidad centralizada que gestiona SecureSign.
 
 ## 2. Principio arquitectónico: BFF de resolución de marca en el borde `[objetivo — no construido]`
 
@@ -27,7 +27,7 @@ Esto es lo que permite que el mismo backend de dominio sirva simultáneamente a 
 No hay ningún código de resolución de dominio/host hoy — `GeneradorUrlFirmaWhiteLabel` siempre devuelve la misma URL genérica, nunca consulta un dominio personalizado. Diseño objetivo:
 
 1. El cliente integrador configura un **CNAME** (`firma.entidad.gob.pe` → `edge.securesign.pe`).
-2. SecureSign Perú provisiona automáticamente un certificado TLS para ese dominio (ACME / Let's Encrypt o CA gestionada, según el plan) mediante un proceso de emisión bajo demanda en el Gateway.
+2. SecureSign provisiona automáticamente un certificado TLS para ese dominio (ACME / Let's Encrypt o CA gestionada, según el plan) mediante un proceso de emisión bajo demanda en el Gateway.
 3. El Gateway resuelve, por cabecera `Host`, el `TenantId` correspondiente y carga `TenantBranding` desde caché (Redis) antes de servir cualquier página o respuesta de API.
 4. Fallback: si no hay dominio personalizado configurado, se usa `https://firma.securesign.pe/t/{tenant-slug}`.
 
