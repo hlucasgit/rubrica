@@ -124,6 +124,35 @@ var app = builder.Build();
         throw new InvalidOperationException("La TSL de IOFE está vencida y ConfianzaIofe:FallarSiTslVencida=true — se rechaza el arranque. " + evaluacion.Mensaje);
 }
 
+// Revocación del certificado que FIRMA la TSL (RUNBOOK.md 12.50, informe de preauditoría INDECOPI/IOFE,
+// hallazgo P1-02): un certificado firmante revocado siempre rechaza el arranque (fail closed, igual que una
+// firma XAdES que no verifica) — indisponibilidad de CRL/OCSP (red caída al arrancar) por defecto solo avisa,
+// igual que ConfianzaIofe:FallarSiTslVencida, para no tumbar la plataforma completa por un problema de red
+// transitorio; ConfianzaIofe:FallarSiRevocacionFirmanteTslIndisponible=true endurece eso para quien lo requiera.
+{
+    var lista = app.Services.GetRequiredService<ListaConfianzaIofe>();
+    var registro = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SecureSign.ConfianzaIofe");
+    if (lista.CertificadoFirmante is not null && lista.RaizConfiableFirmaTsl is not null)
+    {
+        var revocacion = await VerificadorRevocacionFirmanteTsl.VerificarAsync(
+            lista.CertificadoFirmante, lista.RaizConfiableFirmaTsl,
+            app.Services.GetRequiredService<VerificadorRevocacionOcsp>(),
+            app.Services.GetRequiredService<VerificadorRevocacionCrl>());
+
+        foreach (var linea in revocacion.Evidencia) registro.LogInformation("Revocación del firmante de la TSL — {Linea}", linea);
+
+        if (revocacion.Combinado == EstadoRevocacion.Revoked)
+            throw new InvalidOperationException("El certificado que firma la TSL de IOFE está REVOCADO — se rechaza el arranque. " + string.Join(" | ", revocacion.Evidencia));
+
+        if (revocacion.Combinado != EstadoRevocacion.Good)
+        {
+            registro.LogWarning("No se pudo confirmar que el certificado firmante de la TSL NO esté revocado (CRL/OCSP indisponibles) — continuando, sin tratar esto como 'revocado' ni como 'válido'.");
+            if (app.Configuration.GetValue<bool>("ConfianzaIofe:FallarSiRevocacionFirmanteTslIndisponible"))
+                throw new InvalidOperationException("No se pudo verificar la revocación del certificado firmante de la TSL y ConfianzaIofe:FallarSiRevocacionFirmanteTslIndisponible=true — se rechaza el arranque.");
+        }
+    }
+}
+
 // Las migraciones ya NO se aplican aquí — ver src/Migrator (SecureSign.Migrator)
 // y docker-compose.yml (servicio "securesign-signature-migrate").
 

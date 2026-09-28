@@ -25,7 +25,9 @@ namespace SecureSign.Trust;
 /// <c>SigningCertificate</c> dentro de <c>SignedProperties</c> contra el
 /// certificado real de <c>KeyInfo</c> — esa es una comprobación XAdES
 /// adicional, no XML-DSig puro). Tampoco verifica marcas de tiempo ni
-/// revocación del propio certificado firmante de la TSL.
+/// revocación del propio certificado firmante de la TSL — eso lo hace
+/// <see cref="VerificadorRevocacionFirmanteTsl"/> por separado (RUNBOOK.md
+/// 12.50), reutilizando esta misma clase para obtener el certificado firmante.
 ///
 /// CORRECCIÓN (RUNBOOK.md 12.38): hasta 12.37 esta clase creaba
 /// <c>new SignedXml(doc)</c> (contexto = documento entero) y con eso la TSL
@@ -59,7 +61,10 @@ internal static class VerificadorFirmaTsl
         CryptoConfig.AddAlgorithm(typeof(XmlDsigC14NTransform), "http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
     }
 
-    public static void VerificarOLanzar(string rutaXml, X509Certificate2 raizConfiable)
+    /// <returns>El certificado que firmó la TSL, ya verificado contra <paramref name="raizConfiable"/> — para que el
+    /// llamador pueda, además, comprobar su revocación (RUNBOOK.md 12.50; esta clase deliberadamente no lo hace,
+    /// ver el comentario de clase: "tampoco verifica ... revocación del propio certificado firmante").</returns>
+    public static X509Certificate2 VerificarOLanzar(string rutaXml, X509Certificate2 raizConfiable)
     {
         var doc = new XmlDocument { PreserveWhitespace = true };
         doc.Load(rutaXml);
@@ -104,6 +109,8 @@ internal static class VerificadorFirmaTsl
 
         if (!firmaValida)
             throw new InvalidOperationException("La firma XAdES de la TSL NO verifica — el archivo pudo haberse alterado después de firmarse. Se rechaza sin cargar ningún servicio acreditado de su contenido.");
+
+        return certificadoFirmante;
     }
 
     /// <summary>

@@ -34,6 +34,16 @@ public sealed class ListaConfianzaIofe
     /// <summary>true solo si esta instancia se cargó vía <see cref="CargarDesdeArchivoFirmado"/> y su firma XAdES verificó contra un ancla de confianza real.</summary>
     public bool FirmaVerificada { get; }
 
+    /// <summary>
+    /// El certificado que firmó esta TSL, y la raíz contra la que se verificó — solo presentes cuando
+    /// <see cref="FirmaVerificada"/> es true. Expuestos para que <see cref="VerificadorRevocacionFirmanteTsl"/>
+    /// (RUNBOOK.md 12.50) pueda comprobar su revocación sin volver a leer ni re-verificar el archivo XML.
+    /// </summary>
+    public System.Security.Cryptography.X509Certificates.X509Certificate2? CertificadoFirmante { get; }
+
+    /// <inheritdoc cref="CertificadoFirmante"/>
+    public System.Security.Cryptography.X509Certificates.X509Certificate2? RaizConfiableFirmaTsl { get; }
+
     /// <summary>Fecha de emisión declarada por la TSL (<c>ListIssueDateTime</c>); null si no la trae o no se pudo leer.</summary>
     public DateTimeOffset? EmitidaEn { get; }
 
@@ -45,13 +55,17 @@ public sealed class ListaConfianzaIofe
     public DateTimeOffset? ProximaActualizacion { get; }
 
     private ListaConfianzaIofe(IReadOnlyList<ServicioAcreditadoIofe> servicios, DateTimeOffset cargadaEn, bool firmaVerificada,
-        DateTimeOffset? emitidaEn = null, DateTimeOffset? proximaActualizacion = null)
+        DateTimeOffset? emitidaEn = null, DateTimeOffset? proximaActualizacion = null,
+        System.Security.Cryptography.X509Certificates.X509Certificate2? certificadoFirmante = null,
+        System.Security.Cryptography.X509Certificates.X509Certificate2? raizConfiableFirmaTsl = null)
     {
         ServiciosAcreditados = servicios;
         CargadaEn = cargadaEn;
         FirmaVerificada = firmaVerificada;
         EmitidaEn = emitidaEn;
         ProximaActualizacion = proximaActualizacion;
+        CertificadoFirmante = certificadoFirmante;
+        RaizConfiableFirmaTsl = raizConfiableFirmaTsl;
     }
 
     /// <summary>Estado de vigencia de la lista en <paramref name="ahora"/>; <paramref name="aviso"/> es la anticipación con que se marca "por vencer".</summary>
@@ -100,10 +114,11 @@ public sealed class ListaConfianzaIofe
     /// <exception cref="InvalidOperationException">La TSL no trae firma XAdES, o su firma no verifica contra el ancla de confianza dada.</exception>
     public static ListaConfianzaIofe CargarDesdeArchivoFirmado(string rutaXml, System.Security.Cryptography.X509Certificates.X509Certificate2 raizConfiableFirmaTsl)
     {
-        VerificadorFirmaTsl.VerificarOLanzar(rutaXml, raizConfiableFirmaTsl);
+        var certificadoFirmante = VerificadorFirmaTsl.VerificarOLanzar(rutaXml, raizConfiableFirmaTsl);
         var doc = XDocument.Load(rutaXml);
         var (emitida, proxima) = LeerVigencia(doc);
-        return new ListaConfianzaIofe(ParsearServicios(doc), DateTimeOffset.UtcNow, firmaVerificada: true, emitida, proxima);
+        return new ListaConfianzaIofe(ParsearServicios(doc), DateTimeOffset.UtcNow, firmaVerificada: true, emitida, proxima,
+            certificadoFirmante, raizConfiableFirmaTsl);
     }
 
     private static List<ServicioAcreditadoIofe> ParsearServicios(XDocument doc)
