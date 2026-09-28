@@ -1,0 +1,13 @@
+title = "SecureSign — configuración de gitleaks"
+
+# Extiende el conjunto de reglas por defecto de gitleaks (claves AWS, tokens
+# GitHub/Slack/Stripe, JWT, llaves privadas PEM, credenciales genéricas de
+# alta entropía, etc.) sin redefinirlas.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Contraseñas dev-only documentadas en README/RUNBOOK como no productivas — nunca usadas fuera de CI/docker-compose local"
+regexes = [
+  '''securesign_dev_only''',
+]
