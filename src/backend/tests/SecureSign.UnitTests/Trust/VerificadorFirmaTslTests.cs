@@ -1,18 +1,17 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Security.Cryptography.Xml;
-using System.Xml;
 using SecureSign.Trust;
 
 namespace SecureSign.UnitTests.Trust;
 
 /// <summary>
 /// Prueba la verificación XAdES/XML-DSig de la TSL (RUNBOOK.md 12.22) con
-/// documentos de prueba firmados de verdad con <c>SignedXml</c> — no solo
-/// contra el archivo real de INDECOPI. Hasta RUNBOOK.md 12.37 esa prueba
-/// afirmaba lo contrario (que la TSL real "no verifica"): era un error propio
-/// del verificador, corregido en 12.38 — ahora la prueba real exige que SÍ
-/// verifique, y que un solo byte alterado la haga fallar.
+/// documentos de prueba firmados de verdad con <c>SignedXml</c> (ver
+/// TslFirmadaDePruebaHelper) — no solo contra el archivo real de INDECOPI.
+/// Hasta RUNBOOK.md 12.37 esa prueba afirmaba lo contrario (que la TSL real
+/// "no verifica"): era un error propio del verificador, corregido en 12.38 —
+/// ahora la prueba real exige que SÍ verifique, y que un solo byte alterado
+/// la haga fallar.
 /// </summary>
 public sealed class VerificadorFirmaTslTests : IDisposable
 {
@@ -23,123 +22,20 @@ public sealed class VerificadorFirmaTslTests : IDisposable
         foreach (var archivo in _archivos) { try { File.Delete(archivo); } catch { /* mejor esfuerzo */ } }
     }
 
-    static VerificadorFirmaTslTests()
-    {
-        // Mismo registro que el constructor estático de VerificadorFirmaTsl —
-        // hace falta ANTES de firmar el fixture de prueba. RsaPkcs1Sha256SignatureDescription
-        // es public en SecureSign.Trust (CryptoConfig.AddAlgorithm lo exige),
-        // así que se reutiliza directamente en vez de duplicarla aquí.
-        CryptoConfig.AddAlgorithm(typeof(RsaPkcs1Sha256SignatureDescription), "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256");
-        CryptoConfig.AddAlgorithm(typeof(XmlDsigC14NTransform), "http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
-    }
-
-    private const string XadesNs = "http://uri.etsi.org/01903/v1.3.2#";
-    private const string XadesSignedPropertiesTypeUri = "http://uri.etsi.org/01903#SignedProperties";
-
-    /// <summary>
-    /// Construye el fragmento xades:SignedProperties con SigningCertificate/CertDigest/IssuerSerial — mismo
-    /// perfil confirmado contra la TSL real de INDECOPI (RUNBOOK.md 12.51). <paramref name="certificadoParaElHash"/>
-    /// y <paramref name="numeroDeSerieTextual"/> son parámetros separados de <paramref name="certificadoFirmante"/>
-    /// a propósito: los tests negativos los desalinean deliberadamente para simular un SigningCertificate falso.
-    /// </summary>
-    private static XmlElement ConstruirSignedProperties(
-        XmlDocument doc, string idPropiedades, X509Certificate2 certificadoFirmante,
-        X509Certificate2? certificadoParaElHash = null, string? numeroDeSerieTextual = null, string? emisorTextual = null)
-    {
-        var certParaHash = certificadoParaElHash ?? certificadoFirmante;
-        string digest = Convert.ToBase64String(SHA256.HashData(certParaHash.RawData));
-        string serie = numeroDeSerieTextual ?? System.Numerics.BigInteger.Parse("0" + certificadoFirmante.SerialNumber, System.Globalization.NumberStyles.HexNumber).ToString();
-        string emisor = emisorTextual ?? certificadoFirmante.Issuer;
-
-        var signedProperties = doc.CreateElement("etsi", "SignedProperties", XadesNs);
-        signedProperties.SetAttribute("Id", idPropiedades);
-        signedProperties.InnerXml =
-            $"<etsi:SignedSignatureProperties xmlns:etsi=\"{XadesNs}\">" +
-            $"<etsi:SigningCertificate><etsi:Cert>" +
-            $"<etsi:CertDigest><ds:DigestMethod xmlns:ds=\"{XmlDsigNamespaceParaFixture}\" Algorithm=\"http://www.w3.org/2001/04/xmlenc#sha256\"/><ds:DigestValue xmlns:ds=\"{XmlDsigNamespaceParaFixture}\">{digest}</ds:DigestValue></etsi:CertDigest>" +
-            $"<etsi:IssuerSerial><ds:X509IssuerName xmlns:ds=\"{XmlDsigNamespaceParaFixture}\">{System.Security.SecurityElement.Escape(emisor)}</ds:X509IssuerName><ds:X509SerialNumber xmlns:ds=\"{XmlDsigNamespaceParaFixture}\">{serie}</ds:X509SerialNumber></etsi:IssuerSerial>" +
-            $"</etsi:Cert></etsi:SigningCertificate>" +
-            $"</etsi:SignedSignatureProperties>";
-        return signedProperties;
-    }
-
-    private const string XmlDsigNamespaceParaFixture = "http://www.w3.org/2000/09/xmldsig#";
-
     private string EscribirTslFirmada(RSA llavePrivada, X509Certificate2 certificadoFirmante,
         X509Certificate2? certificadoParaElHashEnSigningCertificate = null, string? numeroDeSerieEnSigningCertificate = null, string? emisorEnSigningCertificate = null)
     {
-        var doc = new XmlDocument();
-        doc.LoadXml("<tsl:TrustServiceStatusList xmlns:tsl=\"http://uri.etsi.org/02231/v2#\" Id=\"root-id\"><tsl:SchemeInformation/></tsl:TrustServiceStatusList>");
-
-        const string idPropiedades = "signedProperties-0";
-        var signedProperties = ConstruirSignedProperties(doc, idPropiedades, certificadoFirmante,
-            certificadoParaElHashEnSigningCertificate, numeroDeSerieEnSigningCertificate, emisorEnSigningCertificate);
-        doc.DocumentElement!.AppendChild(signedProperties);
-
-        var signedXml = new SignedXml(doc) { SigningKey = llavePrivada };
-        signedXml.SignedInfo!.CanonicalizationMethod = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
-        signedXml.SignedInfo.SignatureMethod = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
-
-        var referencia = new Reference { Uri = "#root-id", DigestMethod = "http://www.w3.org/2001/04/xmlenc#sha256" };
-        referencia.AddTransform(new XmlDsigEnvelopedSignatureTransform());
-        referencia.AddTransform(new XmlDsigC14NTransform());
-        signedXml.AddReference(referencia);
-
-        var referenciaPropiedades = new Reference { Uri = "#" + idPropiedades, Type = XadesSignedPropertiesTypeUri, DigestMethod = "http://www.w3.org/2001/04/xmlenc#sha256" };
-        referenciaPropiedades.AddTransform(new XmlDsigC14NTransform());
-        signedXml.AddReference(referenciaPropiedades);
-
-        var keyInfo = new KeyInfo();
-        keyInfo.AddClause(new KeyInfoX509Data(certificadoFirmante));
-        signedXml.KeyInfo = keyInfo;
-
-        signedXml.ComputeSignature();
-        doc.DocumentElement!.AppendChild(doc.ImportNode(signedXml.GetXml(), true));
-
-        // Sin esto, XmlDocument.Save indenta el XML (Formatting.Indented es
-        // el default cuando PreserveWhitespace es false) — al recargarlo
-        // luego con PreserveWhitespace=true (como hace VerificadorFirmaTsl,
-        // igual que con la TSL real), esa indentación se vuelve texto
-        // significativo y arruina el C14N, dando un falso "no verifica".
-        // No es un bug del verificador: es este fixture reproduciendo cómo
-        // se guardó el archivo. Confirmado aislando las tres variantes
-        // (en memoria / recarga sin preservar / recarga preservando).
-        doc.PreserveWhitespace = true;
-
-        string ruta = Path.Combine(Path.GetTempPath(), $"tsl-firmada-prueba-{Guid.NewGuid():N}.xml");
-        doc.Save(ruta);
+        string ruta = TslFirmadaDePruebaHelper.Escribir(llavePrivada, certificadoFirmante,
+            certificadoParaElHash: certificadoParaElHashEnSigningCertificate,
+            numeroDeSerieTextual: numeroDeSerieEnSigningCertificate,
+            emisorTextual: emisorEnSigningCertificate);
         _archivos.Add(ruta);
         return ruta;
     }
 
-    /// <summary>Firma VÁLIDA, pero solo sobre un hijo (#hijo-id): el resto del documento —que es lo que luego se lee— queda sin firmar.</summary>
     private string EscribirTslFirmadaSoloUnFragmento(RSA llavePrivada, X509Certificate2 certificadoFirmante, bool duplicarIdDeLaRaiz = false)
     {
-        var doc = new XmlDocument { PreserveWhitespace = true };
-        doc.LoadXml("<tsl:TrustServiceStatusList xmlns:tsl=\"http://uri.etsi.org/02231/v2#\" Id=\"root-id\"><tsl:SchemeInformation Id=\"hijo-id\"/><tsl:Sin-firmar/></tsl:TrustServiceStatusList>");
-
-        var signedXml = new SignedXml(doc) { SigningKey = llavePrivada };
-        signedXml.SignedInfo!.CanonicalizationMethod = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
-        signedXml.SignedInfo.SignatureMethod = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
-        var referencia = new Reference { Uri = "#hijo-id", DigestMethod = "http://www.w3.org/2001/04/xmlenc#sha256" };
-        referencia.AddTransform(new XmlDsigC14NTransform());
-        signedXml.AddReference(referencia);
-        var keyInfo = new KeyInfo();
-        keyInfo.AddClause(new KeyInfoX509Data(certificadoFirmante));
-        signedXml.KeyInfo = keyInfo;
-        signedXml.ComputeSignature();
-        doc.DocumentElement!.AppendChild(doc.ImportNode(signedXml.GetXml(), true));
-
-        if (duplicarIdDeLaRaiz)
-        {
-            // Un segundo elemento con el mismo Id de la raíz: la referencia podría resolver a otro elemento que el leído.
-            var copia = doc.CreateElement("tsl", "Duplicado", "http://uri.etsi.org/02231/v2#");
-            copia.SetAttribute("Id", "root-id");
-            doc.DocumentElement.AppendChild(copia);
-        }
-
-        string ruta = Path.Combine(Path.GetTempPath(), $"tsl-fragmento-{Guid.NewGuid():N}.xml");
-        doc.Save(ruta);
+        string ruta = TslFirmadaDePruebaHelper.EscribirSoloUnFragmentoFirmado(llavePrivada, certificadoFirmante, duplicarIdDeLaRaiz);
         _archivos.Add(ruta);
         return ruta;
     }
@@ -155,7 +51,7 @@ public sealed class VerificadorFirmaTslTests : IDisposable
     private static X509Certificate2 GenerarAutofirmado(string cn, RSA? llave = null)
     {
         llave ??= RSA.Create(2048);
-        var req = new System.Security.Cryptography.X509Certificates.CertificateRequest($"CN={cn}", llave, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var req = new CertificateRequest($"CN={cn}", llave, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         return new X509Certificate2(req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1)).Export(X509ContentType.Cert));
     }
 
@@ -218,7 +114,7 @@ public sealed class VerificadorFirmaTslTests : IDisposable
         using var llave = RSA.Create(2048);
         var raiz = GenerarAutofirmado("Raiz Con Id Duplicado", llave);
         string ruta = EscribirTslFirmada(llave, raiz);
-        var doc = new XmlDocument { PreserveWhitespace = true };
+        var doc = new System.Xml.XmlDocument { PreserveWhitespace = true };
         doc.Load(ruta);
         var duplicado = doc.CreateElement("tsl", "Duplicado", "http://uri.etsi.org/02231/v2#");
         duplicado.SetAttribute("Id", "root-id");
@@ -275,7 +171,7 @@ public sealed class VerificadorFirmaTslTests : IDisposable
     public void SigningCertificate_con_el_mismo_emisor_en_otro_orden_de_RDN_sigue_verificando()
     {
         using var llave = RSA.Create(2048);
-        var req = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+        var req = new CertificateRequest(
             "CN=Raiz Multi RDN De Prueba,O=SecureSign,C=PE", llave, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         var raiz = new X509Certificate2(req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1)).Export(X509ContentType.Cert));
 
