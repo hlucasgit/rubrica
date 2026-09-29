@@ -33,10 +33,48 @@ public sealed class VerificadorFirmaTslTests : IDisposable
         CryptoConfig.AddAlgorithm(typeof(XmlDsigC14NTransform), "http://www.w3.org/TR/2001/REC-xml-c14n-20010315");
     }
 
-    private string EscribirTslFirmada(RSA llavePrivada, X509Certificate2 certificadoFirmante)
+    private const string XadesNs = "http://uri.etsi.org/01903/v1.3.2#";
+    private const string XadesSignedPropertiesTypeUri = "http://uri.etsi.org/01903#SignedProperties";
+
+    /// <summary>
+    /// Construye el fragmento xades:SignedProperties con SigningCertificate/CertDigest/IssuerSerial — mismo
+    /// perfil confirmado contra la TSL real de INDECOPI (RUNBOOK.md 12.51). <paramref name="certificadoParaElHash"/>
+    /// y <paramref name="numeroDeSerieTextual"/> son parámetros separados de <paramref name="certificadoFirmante"/>
+    /// a propósito: los tests negativos los desalinean deliberadamente para simular un SigningCertificate falso.
+    /// </summary>
+    private static XmlElement ConstruirSignedProperties(
+        XmlDocument doc, string idPropiedades, X509Certificate2 certificadoFirmante,
+        X509Certificate2? certificadoParaElHash = null, string? numeroDeSerieTextual = null, string? emisorTextual = null)
+    {
+        var certParaHash = certificadoParaElHash ?? certificadoFirmante;
+        string digest = Convert.ToBase64String(SHA256.HashData(certParaHash.RawData));
+        string serie = numeroDeSerieTextual ?? System.Numerics.BigInteger.Parse("0" + certificadoFirmante.SerialNumber, System.Globalization.NumberStyles.HexNumber).ToString();
+        string emisor = emisorTextual ?? certificadoFirmante.Issuer;
+
+        var signedProperties = doc.CreateElement("etsi", "SignedProperties", XadesNs);
+        signedProperties.SetAttribute("Id", idPropiedades);
+        signedProperties.InnerXml =
+            $"<etsi:SignedSignatureProperties xmlns:etsi=\"{XadesNs}\">" +
+            $"<etsi:SigningCertificate><etsi:Cert>" +
+            $"<etsi:CertDigest><ds:DigestMethod xmlns:ds=\"{XmlDsigNamespaceParaFixture}\" Algorithm=\"http://www.w3.org/2001/04/xmlenc#sha256\"/><ds:DigestValue xmlns:ds=\"{XmlDsigNamespaceParaFixture}\">{digest}</ds:DigestValue></etsi:CertDigest>" +
+            $"<etsi:IssuerSerial><ds:X509IssuerName xmlns:ds=\"{XmlDsigNamespaceParaFixture}\">{System.Security.SecurityElement.Escape(emisor)}</ds:X509IssuerName><ds:X509SerialNumber xmlns:ds=\"{XmlDsigNamespaceParaFixture}\">{serie}</ds:X509SerialNumber></etsi:IssuerSerial>" +
+            $"</etsi:Cert></etsi:SigningCertificate>" +
+            $"</etsi:SignedSignatureProperties>";
+        return signedProperties;
+    }
+
+    private const string XmlDsigNamespaceParaFixture = "http://www.w3.org/2000/09/xmldsig#";
+
+    private string EscribirTslFirmada(RSA llavePrivada, X509Certificate2 certificadoFirmante,
+        X509Certificate2? certificadoParaElHashEnSigningCertificate = null, string? numeroDeSerieEnSigningCertificate = null, string? emisorEnSigningCertificate = null)
     {
         var doc = new XmlDocument();
         doc.LoadXml("<tsl:TrustServiceStatusList xmlns:tsl=\"http://uri.etsi.org/02231/v2#\" Id=\"root-id\"><tsl:SchemeInformation/></tsl:TrustServiceStatusList>");
+
+        const string idPropiedades = "signedProperties-0";
+        var signedProperties = ConstruirSignedProperties(doc, idPropiedades, certificadoFirmante,
+            certificadoParaElHashEnSigningCertificate, numeroDeSerieEnSigningCertificate, emisorEnSigningCertificate);
+        doc.DocumentElement!.AppendChild(signedProperties);
 
         var signedXml = new SignedXml(doc) { SigningKey = llavePrivada };
         signedXml.SignedInfo!.CanonicalizationMethod = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
@@ -46,6 +84,10 @@ public sealed class VerificadorFirmaTslTests : IDisposable
         referencia.AddTransform(new XmlDsigEnvelopedSignatureTransform());
         referencia.AddTransform(new XmlDsigC14NTransform());
         signedXml.AddReference(referencia);
+
+        var referenciaPropiedades = new Reference { Uri = "#" + idPropiedades, Type = XadesSignedPropertiesTypeUri, DigestMethod = "http://www.w3.org/2001/04/xmlenc#sha256" };
+        referenciaPropiedades.AddTransform(new XmlDsigC14NTransform());
+        signedXml.AddReference(referenciaPropiedades);
 
         var keyInfo = new KeyInfo();
         keyInfo.AddClause(new KeyInfoX509Data(certificadoFirmante));
@@ -185,6 +227,64 @@ public sealed class VerificadorFirmaTslTests : IDisposable
 
         var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, raiz));
         Assert.Contains("más de una vez", ex.Message);
+    }
+
+    /// <summary>RUNBOOK.md 12.51 (informe de preauditoría INDECOPI/IOFE, hallazgo P1-03): el hash del SigningCertificate no corresponde al certificado real de KeyInfo.</summary>
+    [Fact]
+    public void SigningCertificate_con_hash_de_otro_certificado_se_rechaza()
+    {
+        using var llave = RSA.Create(2048);
+        var raiz = GenerarAutofirmado("Raiz SigningCertificate Falso De Prueba", llave);
+        var otroCertificadoCualquiera = GenerarAutofirmado("Impostor De Prueba");
+        string ruta = EscribirTslFirmada(llave, raiz, certificadoParaElHashEnSigningCertificate: otroCertificadoCualquiera);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, raiz));
+        Assert.Contains("hash de certificado que NO coincide", ex.Message);
+    }
+
+    /// <summary>Mismo hallazgo — ahora el número de serie de IssuerSerial no es el del certificado real.</summary>
+    [Fact]
+    public void SigningCertificate_con_numero_de_serie_incorrecto_se_rechaza()
+    {
+        using var llave = RSA.Create(2048);
+        var raiz = GenerarAutofirmado("Raiz Serie Falsa De Prueba", llave);
+        string ruta = EscribirTslFirmada(llave, raiz, numeroDeSerieEnSigningCertificate: "999999999999999999");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, raiz));
+        Assert.Contains("número de serie", ex.Message);
+    }
+
+    /// <summary>Mismo hallazgo — ahora el emisor declarado no corresponde al del certificado real.</summary>
+    [Fact]
+    public void SigningCertificate_con_emisor_incorrecto_se_rechaza()
+    {
+        using var llave = RSA.Create(2048);
+        var raiz = GenerarAutofirmado("Raiz Emisor Falso De Prueba", llave);
+        string ruta = EscribirTslFirmada(llave, raiz, emisorEnSigningCertificate: "CN=Emisor Completamente Distinto");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, raiz));
+        Assert.Contains("el emisor", ex.Message);
+    }
+
+    /// <summary>
+    /// Confirmado contra la TSL real: xades:X509IssuerName reordena los RDN respecto al orden que produce
+    /// .NET/OpenSSL para el mismo certificado — la comparación debe tolerar eso (RFC 5280 §4.1.2.4, comparación
+    /// estructural, no de cadena) sin por eso dejar de detectar un emisor realmente distinto (prueba anterior).
+    /// </summary>
+    [Fact]
+    public void SigningCertificate_con_el_mismo_emisor_en_otro_orden_de_RDN_sigue_verificando()
+    {
+        using var llave = RSA.Create(2048);
+        var req = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=Raiz Multi RDN De Prueba,O=SecureSign,C=PE", llave, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var raiz = new X509Certificate2(req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1)).Export(X509ContentType.Cert));
+
+        // El orden real (.NET) es "CN=...,O=...,C=PE"; se declara invertido en el XML, como hace la TSL real.
+        string emisorReordenado = string.Join(",", raiz.Issuer.Split(',').Select(s => s.Trim()).Reverse());
+        string ruta = EscribirTslFirmada(llave, raiz, emisorEnSigningCertificate: emisorReordenado);
+
+        var lista = ListaConfianzaIofe.CargarDesdeArchivoFirmado(ruta, raiz);
+        Assert.True(lista.FirmaVerificada);
     }
 
     private static (string Tsl, string Ancla)? RutasDeLaTslReal()

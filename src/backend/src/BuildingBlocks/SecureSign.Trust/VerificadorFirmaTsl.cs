@@ -46,6 +46,7 @@ namespace SecureSign.Trust;
 internal static class VerificadorFirmaTsl
 {
     private const string XmlDsigNamespace = "http://www.w3.org/2000/09/xmldsig#";
+    private const string XadesNamespace = "http://uri.etsi.org/01903/v1.3.2#";
 
     static VerificadorFirmaTsl()
     {
@@ -110,7 +111,107 @@ internal static class VerificadorFirmaTsl
         if (!firmaValida)
             throw new InvalidOperationException("La firma XAdES de la TSL NO verifica — el archivo pudo haberse alterado después de firmarse. Se rechaza sin cargar ningún servicio acreditado de su contenido.");
 
+        ExigirQueElSigningCertificateCoincidaConKeyInfo(signedXml, doc, certificadoFirmante);
+
         return certificadoFirmante;
+    }
+
+    private const string XadesSignedPropertiesTypeUri = "http://uri.etsi.org/01903#SignedProperties";
+
+    /// <summary>
+    /// Cierre estricto del perfil XAdES (RUNBOOK.md 12.51, informe de preauditoría INDECOPI/IOFE, hallazgo
+    /// P1-03): XML-DSig por sí solo solo prueba "alguna llave privada firmó esto"; XAdES agrega el elemento
+    /// <c>xades:SigningCertificate</c> dentro de <c>SignedProperties</c> — un hash del certificado (y su
+    /// emisor+serie) que ata criptográficamente CUÁL certificado se está afirmando como firmante. Sin cruzar
+    /// esto contra el certificado real de <c>ds:KeyInfo</c>, un documento con dos <c>ds:X509Certificate</c>
+    /// (uno referenciado por <c>KeyInfo</c>, otro distinto afirmado en <c>SigningCertificate</c>) podría pasar
+    /// <c>CheckSignature</c> sin que "el certificado que dice ser el firmante" sea realmente el que firmó.
+    ///
+    /// Confirmado contra la TSL real de INDECOPI (no supuesto): trae <c>SigningCertificate</c> con
+    /// <c>CertDigest</c> (SHA-256) e <c>IssuerSerial</c>, y ambos coinciden exactamente con el certificado real
+    /// de <c>KeyInfo</c> — verificado manualmente con Python/OpenSSL antes de escribir este código. El perfil
+    /// real SIEMPRE lo trae; su ausencia se trata como alteración (rechazo), no como "perfil distinto sin esta
+    /// información" — no hay evidencia de que INDECOPI publique una TSL sin este elemento.
+    ///
+    /// Localiza <c>SignedProperties</c> por el <c>Id</c> que declara la PROPIA <c>ds:Reference</c> ya verificada
+    /// por <c>CheckSignature</c> (identificada por su <c>Type</c> XAdES), nunca por búsqueda global de la
+    /// etiqueta — y exige que ese <c>Id</c> sea único en el documento (mismo criterio anti-envoltura que el
+    /// <c>Id</c> del elemento raíz): así no importa si un atacante planta un <c>SignedProperties</c> señuelo en
+    /// otra parte del documento, porque nunca se lee ese, se lee el que la firma realmente cubre.
+    /// </summary>
+    private static void ExigirQueElSigningCertificateCoincidaConKeyInfo(SignedXml signedXml, XmlDocument doc, X509Certificate2 certificadoFirmante)
+    {
+        string? idPropiedadesFirmadas = null;
+        foreach (Reference referencia in signedXml.SignedInfo!.References)
+        {
+            if (referencia.Type == XadesSignedPropertiesTypeUri && referencia.Uri is { Length: > 0 } uri && uri.StartsWith('#'))
+                idPropiedadesFirmadas = uri[1..];
+        }
+        if (idPropiedadesFirmadas is null)
+            throw new InvalidOperationException("La firma de la TSL no trae una referencia XAdES a SignedProperties (Type=\"" + XadesSignedPropertiesTypeUri + "\") — no hay dónde leer el SigningCertificate, se rechaza.");
+
+        var nodosConEseId = doc.SelectNodes($"//*[@Id='{idPropiedadesFirmadas}']")!;
+        if (nodosConEseId.Count != 1)
+            throw new InvalidOperationException(
+                $"El identificador '{idPropiedadesFirmadas}' de SignedProperties aparece {nodosConEseId.Count} veces en el documento (se esperaba 1) — posible ataque de envoltura de firma; se rechaza.");
+
+        var signedProperties = (XmlElement)nodosConEseId[0]!;
+
+        var nodosCert = signedProperties.GetElementsByTagName("Cert", XadesNamespace);
+        if (nodosCert.Count == 0)
+            throw new InvalidOperationException("SignedProperties de la TSL no trae xades:SigningCertificate/xades:Cert — el perfil real de INDECOPI siempre lo trae; se rechaza en vez de asumir que es opcional.");
+
+        var cert = (XmlElement)nodosCert[0]!;
+
+        var digestMethod = (XmlElement?)cert.GetElementsByTagName("DigestMethod", XmlDsigNamespace).Cast<XmlNode>().FirstOrDefault();
+        var digestValue = (XmlElement?)cert.GetElementsByTagName("DigestValue", XmlDsigNamespace).Cast<XmlNode>().FirstOrDefault();
+        if (digestMethod is null || digestValue is null)
+            throw new InvalidOperationException("xades:CertDigest de la TSL no trae DigestMethod/DigestValue completos — se rechaza.");
+
+        string algoritmo = digestMethod.GetAttribute("Algorithm");
+        byte[] digestReal = algoritmo switch
+        {
+            "http://www.w3.org/2001/04/xmlenc#sha256" => SHA256.HashData(certificadoFirmante.RawData),
+            "http://www.w3.org/2000/09/xmldsig#sha1" => SHA1.HashData(certificadoFirmante.RawData),
+            _ => throw new InvalidOperationException($"xades:CertDigest de la TSL declara un algoritmo no reconocido ('{algoritmo}') — no se adivina, se rechaza."),
+        };
+        string digestDeclarado = digestValue.InnerText.Trim();
+        if (!CryptographicOperations.FixedTimeEquals(digestReal, Convert.FromBase64String(digestDeclarado)))
+            throw new InvalidOperationException(
+                "El xades:SigningCertificate de la TSL declara un hash de certificado que NO coincide con el certificado real de ds:KeyInfo — el certificado que la firma dice que firmó no es el que realmente la verificó; se rechaza.");
+
+        var issuerSerial = (XmlElement?)signedProperties.GetElementsByTagName("IssuerSerial", XadesNamespace).Cast<XmlNode>().FirstOrDefault();
+        var nombreEmisorXml = (XmlElement?)issuerSerial?.GetElementsByTagName("X509IssuerName", XmlDsigNamespace).Cast<XmlNode>().FirstOrDefault();
+        var serieXml = (XmlElement?)issuerSerial?.GetElementsByTagName("X509SerialNumber", XmlDsigNamespace).Cast<XmlNode>().FirstOrDefault();
+        if (nombreEmisorXml is null || serieXml is null)
+            throw new InvalidOperationException("xades:IssuerSerial de la TSL no trae X509IssuerName/X509SerialNumber completos — se rechaza.");
+
+        if (!System.Numerics.BigInteger.TryParse(serieXml.InnerText.Trim(), out var serieDeclarada) || serieDeclarada != HexANumeroSinSigno(certificadoFirmante.SerialNumber))
+            throw new InvalidOperationException(
+                $"xades:IssuerSerial de la TSL declara el número de serie '{serieXml.InnerText.Trim()}', que no coincide con el del certificado real de ds:KeyInfo ('{certificadoFirmante.SerialNumber}') — se rechaza.");
+
+        if (!ConjuntosDeRdnEquivalentes(nombreEmisorXml.InnerText, certificadoFirmante.Issuer))
+            throw new InvalidOperationException(
+                $"xades:IssuerSerial de la TSL declara el emisor '{nombreEmisorXml.InnerText.Trim()}', que no coincide (como conjunto de RDN) con el emisor real del certificado de ds:KeyInfo ('{certificadoFirmante.Issuer}') — se rechaza.");
+    }
+
+    private static System.Numerics.BigInteger HexANumeroSinSigno(string hex) =>
+        System.Numerics.BigInteger.Parse("0" + hex, System.Globalization.NumberStyles.HexNumber);
+
+    /// <summary>
+    /// Comparación de Distinguished Name por CONJUNTO de RDN, no por igualdad de cadena: confirmado contra la
+    /// TSL real que el orden de atributos en xades:X509IssuerName ("CN=...,O=...,OU=...,C=...") es el INVERSO
+    /// del que produce .NET/OpenSSL para el mismo certificado ("C=...,OU=...,O=...,CN=...") — RFC 5280 §4.1.2.4
+    /// exige comparar por estructura, nunca por bytes exactos de la cadena. Simplificación documentada: separa
+    /// por comas sin escapar comillas/comas dentro de un valor (RFC 4514 completo) — suficiente para los DN
+    /// reales de la IOFE, que no las usan; no es un parser RFC 4514 genérico.
+    /// </summary>
+    private static bool ConjuntosDeRdnEquivalentes(string dn1, string dn2)
+    {
+        static HashSet<string> Rdns(string dn) =>
+            dn.Split(',').Select(p => p.Trim().ToUpperInvariant()).Where(p => p.Length > 0).ToHashSet();
+
+        return Rdns(dn1).SetEquals(Rdns(dn2));
     }
 
     /// <summary>
