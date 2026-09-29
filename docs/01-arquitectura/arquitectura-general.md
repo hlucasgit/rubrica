@@ -100,7 +100,7 @@ Estado real vs. objetivo (auditado contra el código el 2026-09-16): de los 10, 
 | 7 | **Evidencias** | Genera y custodia el expediente probatorio (cadena de hashes real) | Evidencias, certificados de evidencia | 🟢 Implementado |
 | 8 | **Certificados** | Gestión del ciclo de vida de certificados digitales | Certificados, estado de revocación | 🔴 No existe como servicio propio — la validación de certificados (vigencia, cadena, TSL, OCSP/CRL) vive dentro de `SecureSign.Trust`, una librería compartida, no un servicio con su propia base de datos |
 | 9 | **Tenancy / Integraciones** | Alta de organizaciones, credenciales API, branding White Label, cuotas | Organizaciones, ClientApps, Planes | 🔴 No existe — hoy es un catálogo estático (`ClientesDemo` en configuración del Gateway), con su propio comentario en el código señalando que reemplaza a este "futuro Servicio de Tenancy/Integraciones" |
-| 10 | **API Gateway** | Punto único de entrada, autenticación OAuth2/JWT, ruteo | — (stateless) | 🟡 Implementado (RS256, JWKS, RUNBOOK.md 12.21), sin rate limiting ni versionado |
+| 10 | **API Gateway** | Punto único de entrada, autenticación OAuth2/JWT, ruteo | — (stateless) | 🟡 Implementado (RS256, JWKS, RUNBOOK.md 12.21); rate limiting en endpoints de credenciales (`/api/auth/token`, `interno/emitir`, RUNBOOK.md 12.29), sin rate limiting global en las rutas proxied ni versionado |
 
 ## 4. Comunicación entre servicios `[objetivo]`
 
