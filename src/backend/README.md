@@ -14,7 +14,7 @@ Implementa, además de la orquestación, la lógica de dominio central descrita 
 - La validación de integridad documental pre-firma (innovación #2) — [`src/Services/SecureSign.Documents`](src/Services/SecureSign.Documents)
 - La abstracción criptográfica independiente del proveedor — [`src/Services/SecureSign.Crypto`](src/Services/SecureSign.Crypto)
 
-**79 pruebas unitarias pasan** sobre esta lógica (`dotnet test`), incluyendo una prueba de regresión para un bug de persistencia real encontrado durante esta verificación (ver más abajo), las pruebas del aggregate `UsuarioIdentidad`, la batería de PAdES/CMS/TSA que encontró y corrigió un bug real de truncamiento (RUNBOOK.md 12.15), y la de `SecureSign.Trust` que encontró y corrigió la falta de verificación de firma en CRL/OCSP (RUNBOOK.md 12.17).
+**274 pruebas unitarias pasan** (`dotnet test`, RUNBOOK.md 12.54) sobre esta lógica y el resto de la plataforma, incluyendo una prueba de regresión para un bug de persistencia real encontrado durante esta verificación (ver más abajo), las pruebas del aggregate `UsuarioIdentidad`, la batería de PAdES/CMS/TSA que encontró y corrigió un bug real de truncamiento (RUNBOOK.md 12.15), y la de `SecureSign.Trust` que encontró y corrigió la falta de verificación de firma en CRL/OCSP (RUNBOOK.md 12.17).
 
 ## Lo que de verdad ocurre cuando firmas un documento (verificado, no teórico)
 
