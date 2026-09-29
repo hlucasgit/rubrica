@@ -7,7 +7,14 @@ title = "SecureSign — configuración de gitleaks"
 useDefault = true
 
 [allowlist]
-description = "Contraseñas dev-only documentadas en README/RUNBOOK como no productivas — nunca usadas fuera de CI/docker-compose local"
+description = "Contraseñas dev-only y valores de prueba documentados como no productivos — nunca usados fuera de CI/docker-compose local o de dotnet test"
 regexes = [
   '''securesign_dev_only''',
+  # Valores de prueba de la suite de SecureSign.Shared.Auth (RUNBOOK.md 12.27/12.28,
+  # SecretoInternoTests.cs/SecretosDeArchivoTests.cs) — literales que solo existen dentro de `dotnet test`,
+  # nunca en un appsettings.json ni en un secreto real; el propio texto ("de-prueba", "valor-por-variable",
+  # "productivo-largo") deja claro el propósito, no es un secreto filtrado.
+  '''[a-z0-9-]*de-prueba[a-z0-9-]*''',
+  '''valor-por-variable-[a-z0-9]*''',
+  '''secreto-productivo-largo-[a-z0-9]*''',
 ]
