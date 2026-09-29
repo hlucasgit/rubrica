@@ -17,12 +17,18 @@ namespace SecureSign.Trust;
 /// declara <c>ExtendedKeyUsage: EmailProtection (1.3.6.1.5.5.7.3.4)</c> con Obligatorio=No, Crítica=No — el
 /// propio documento de RENIEC confirma que ese EKU NO es obligatorio ni específico de firma en el perfil de
 /// firma, lo que respalda con una fuente citable la decisión ya tomada en RUNBOOK.md 12.9/12.34 de no exigirlo.
-/// `appsettings.json` de Signature.Api ya trae <c>0.4.0.2042.1.2</c> configurado en
+/// <b>Confirmado en vivo (RUNBOOK.md 12.58)</b> contra el certificado de firma real de TRES Entidades de
+/// Certificación acreditadas distintas (leído directamente del almacén de certificados/DNIe físico conectado,
+/// sin necesidad de PIN — solo lectura del certificado público): RENIEC (DNIe físico) trae exactamente
+/// <c>0.4.0.2042.1.2</c>, confirmando la fuente documental de arriba contra hardware real por primera vez.
+/// LLAMA.PE y CAMERFIRMA PERÚ — otras dos EC acreditadas reales — traen cada una su PROPIO OID de política
+/// (<c>1.3.6.1.4.1.52215.0.1.0.1.1</c> y <c>1.3.6.1.4.1.17326.30.16.0.1</c> respectivamente), NINGUNO de los
+/// dos es <c>0.4.0.2042.1.2</c> — confirma empíricamente que el OID ETSI NCP+ genérico NO es compartido entre
+/// EC acreditadas de la IOFE, cada una declara el suyo propio.
+/// `appsettings.json` de Signature.Api trae los tres OID configurados en
 /// <see cref="OidsPoliticaPermitidos"/> (reporta Cumple/NoCumple en la evidencia), con <see cref="Exigir"/> en
-/// false — la Política General de Certificación cubre solo ECERNEP/RENIEC, no necesariamente cada Entidad de
-/// Certificación acreditada de la IOFE, y no se ha podido probar en vivo contra un DNIe físico con esta
-/// configuración en esta sesión (Docker no disponible); exigir sigue siendo una decisión pendiente de
-/// confirmación operativa, no de falta de fuente.
+/// false — solo 3 de las EC acreditadas de la IOFE están confirmadas, no la totalidad; exigir sigue siendo una
+/// decisión pendiente de confirmación operativa, no de falta de fuente para las tres ya confirmadas.
 /// </summary>
 public sealed class OpcionesPoliticaCertificado
 {
