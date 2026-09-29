@@ -8,7 +8,7 @@ namespace SecureSign.Signature.Api;
 /// abortar el arranque es decisión de <c>Program.cs</c>, no de un servicio ya en marcha.
 /// </summary>
 public sealed class VigilanteVigenciaTsl(
-    ListaConfianzaIofe lista, ILogger<VigilanteVigenciaTsl> registro, TimeProvider? reloj = null, EstadoSaludTsl? estadoSalud = null)
+    IProveedorListaConfianzaIofe proveedorLista, ILogger<VigilanteVigenciaTsl> registro, TimeProvider? reloj = null, EstadoSaludTsl? estadoSalud = null)
     : BackgroundService
 {
     public static readonly TimeSpan Intervalo = TimeSpan.FromHours(6);
@@ -32,6 +32,7 @@ public sealed class VigilanteVigenciaTsl(
             // La primera evaluación ya la hizo el arranque; aquí solo las periódicas.
             while (await temporizador.WaitForNextTickAsync(detener))
             {
+                var lista = proveedorLista.Actual;
                 var ahora = tiempo.GetUtcNow();
                 var evaluacion = EvaluadorVigenciaTsl.Evaluar(lista, ahora, fallarSiVencida: false);
                 Registrar(registro, evaluacion);

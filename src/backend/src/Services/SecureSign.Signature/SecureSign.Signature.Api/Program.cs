@@ -52,10 +52,18 @@ builder.Services.AddSingleton(_ => AlmacenRaicesConfiables.CargarDesdeDirectorio
 // La TSL se carga VERIFICANDO su firma XAdES contra la raíz oficial de INDECOPI (RUNBOOK.md 12.38) y se hace
 // AQUÍ, al arrancar, no de forma perezosa: si el archivo fue alterado o no verifica, el servicio no arranca
 // (fail closed) en vez de fallar en la primera petición o, peor, aceptar una lista adulterada.
-builder.Services.AddSingleton(ListaConfianzaIofe.CargarDesdeArchivoFirmado(
-    Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml"),
-    new System.Security.Cryptography.X509Certificates.X509Certificate2(
-        Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-firmante-raiz.crt"))));
+//
+// Se registra detrás de IProveedorListaConfianzaIofe (RUNBOOK.md 12.57, hallazgo P2-01) para poder reemplazarla
+// EN CALIENTE mientras el proceso sigue corriendo — ver VigilanteActualizacionTsl más abajo. ListaConfianzaIofe
+// en sí sigue disponible en el contenedor como Scoped (se resuelve leyendo el proveedor de nuevo en cada scope
+// nuevo, o sea en cada request) para que ValidadorCertificados, que ya la toma como parámetro de constructor
+// directo, la reciba siempre actualizada sin que su propio código cambie.
+string rutaArchivoTsl = Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-pe.xml");
+var raizConfiableFirmaTsl = new System.Security.Cryptography.X509Certificates.X509Certificate2(
+    Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "tsl-firmante-raiz.crt"));
+builder.Services.AddSingleton<IProveedorListaConfianzaIofe>(_ =>
+    new ProveedorListaConfianzaIofe(ListaConfianzaIofe.CargarDesdeArchivoFirmado(rutaArchivoTsl, raizConfiableFirmaTsl)));
+builder.Services.AddScoped(sp => sp.GetRequiredService<IProveedorListaConfianzaIofe>().Actual);
 // Política opcional de EKU/CertificatePolicies (RUNBOOK.md 12.34): sección "PoliticaCertificado" de
 // appsettings — por defecto vacía, o sea solo informativa.
 builder.Services.AddSingleton(builder.Configuration.GetSection(OpcionesPoliticaCertificado.SeccionConfiguracion).Get<OpcionesPoliticaCertificado>()
@@ -115,13 +123,26 @@ builder.Services.AddSecureSignInternalHttpClient<IAuditoriaServiceClient, Audito
 builder.Services.AddSingleton<EstadoSaludTsl>();
 builder.Services.AddHostedService<SecureSign.Signature.Api.VigilanteVigenciaTsl>();
 
+// Recarga en caliente de la TSL (RUNBOOK.md 12.57, informe de preauditoría INDECOPI/IOFE, hallazgo P2-01):
+// deshabilitada por defecto — ConfianzaIofe:ActualizacionAutomatica:Habilitada=true la activa. La URL por
+// defecto es la misma que usa la herramienta de línea de comandos securesign-actualizar-tsl.
+builder.Services.AddHttpClient<ActualizadorTsl>();
+builder.Services.AddHostedService(sp => new SecureSign.Signature.Api.VigilanteActualizacionTsl(
+    sp.GetRequiredService<IProveedorListaConfianzaIofe>(),
+    sp.GetRequiredService<ActualizadorTsl>(),
+    sp.GetRequiredService<ILogger<SecureSign.Signature.Api.VigilanteActualizacionTsl>>(),
+    new Uri(builder.Configuration["ConfianzaIofe:ActualizacionAutomatica:UrlDescarga"] ?? "https://iofe.indecopi.gob.pe/TSL/tsl-pe.xml"),
+    rutaArchivoTsl,
+    raizConfiableFirmaTsl,
+    builder.Configuration.GetValue<bool>("ConfianzaIofe:ActualizacionAutomatica:Habilitada")));
+
 var app = builder.Build();
 
 // Vigencia de la TSL (RUNBOOK.md 12.40): se evalúa al arrancar y luego cada VigilanteVigenciaTsl.Intervalo.
 // Con ConfianzaIofe:FallarSiTslVencida=true un servicio con la lista vencida no arranca (por defecto solo avisa:
 // la actualización del archivo es manual y un servicio caído por eso sería peor que uno que avisa).
 {
-    var lista = app.Services.GetRequiredService<ListaConfianzaIofe>();
+    var lista = app.Services.GetRequiredService<IProveedorListaConfianzaIofe>().Actual;
     var ahora = DateTimeOffset.UtcNow;
     var evaluacion = EvaluadorVigenciaTsl.Evaluar(lista, ahora, app.Configuration.GetValue<bool>("ConfianzaIofe:FallarSiTslVencida"));
     SecureSign.Signature.Api.VigilanteVigenciaTsl.Registrar(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SecureSign.ConfianzaIofe"), evaluacion);
@@ -136,7 +157,7 @@ var app = builder.Build();
 // igual que ConfianzaIofe:FallarSiTslVencida, para no tumbar la plataforma completa por un problema de red
 // transitorio; ConfianzaIofe:FallarSiRevocacionFirmanteTslIndisponible=true endurece eso para quien lo requiera.
 {
-    var lista = app.Services.GetRequiredService<ListaConfianzaIofe>();
+    var lista = app.Services.GetRequiredService<IProveedorListaConfianzaIofe>().Actual;
     var registro = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SecureSign.ConfianzaIofe");
     if (lista.CertificadoFirmante is not null && lista.RaizConfiableFirmaTsl is not null)
     {

@@ -46,7 +46,7 @@ public sealed class VigilanteVigenciaTslTests
         var reloj = new FakeTimeProvider(inicio);
         var lista = CrearListaVigente(inicio);
         var registro = new RegistroDePrueba();
-        using var vigilante = new VigilanteVigenciaTsl(lista, registro, reloj);
+        using var vigilante = new VigilanteVigenciaTsl(new ProveedorListaConfianzaIofe(lista), registro, reloj);
 
         await vigilante.StartAsync(CancellationToken.None);
         try
@@ -81,7 +81,7 @@ public sealed class VigilanteVigenciaTslTests
         var lista = CrearListaVigente(inicio);
         var registro = new RegistroDePrueba();
         var estadoSalud = new EstadoSaludTsl();
-        using var vigilante = new VigilanteVigenciaTsl(lista, registro, reloj, estadoSalud);
+        using var vigilante = new VigilanteVigenciaTsl(new ProveedorListaConfianzaIofe(lista), registro, reloj, estadoSalud);
 
         await vigilante.StartAsync(CancellationToken.None);
         try
@@ -110,7 +110,7 @@ public sealed class VigilanteVigenciaTslTests
         var reloj = new FakeTimeProvider(inicio);
         var lista = CrearListaVigente(inicio);
         var registro = new RegistroDePrueba();
-        using var vigilante = new VigilanteVigenciaTsl(lista, registro, reloj);
+        using var vigilante = new VigilanteVigenciaTsl(new ProveedorListaConfianzaIofe(lista), registro, reloj);
 
         await vigilante.StartAsync(CancellationToken.None);
         reloj.Advance(VigilanteVigenciaTsl.Intervalo);
