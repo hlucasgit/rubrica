@@ -72,6 +72,37 @@ public sealed class VigilanteVigenciaTslTests
         }
     }
 
+    /// <summary>RUNBOOK.md 12.54 (informe de preauditoría INDECOPI/IOFE, hallazgo P2-02): el health check lee lo que este ciclo registra, así que el ciclo tiene que registrarlo de verdad.</summary>
+    [Fact]
+    public async Task CadaEvaluacionQuedaRegistradaEnEstadoSaludTsl()
+    {
+        var inicio = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var reloj = new FakeTimeProvider(inicio);
+        var lista = CrearListaVigente(inicio);
+        var registro = new RegistroDePrueba();
+        var estadoSalud = new EstadoSaludTsl();
+        using var vigilante = new VigilanteVigenciaTsl(lista, registro, reloj, estadoSalud);
+
+        await vigilante.StartAsync(CancellationToken.None);
+        try
+        {
+            Assert.False(estadoSalud.Leer().Cargada); // todavía no tocó el reloj
+
+            reloj.Advance(VigilanteVigenciaTsl.Intervalo);
+            // Se espera la condición real (Cargada), no un proxy (el contador de mensajes del logger) — ambas
+            // escrituras ocurren en la misma iteración sin await entre medias, pero solo una es lo que se prueba.
+            await EsperarHasta(() => estadoSalud.Leer().Cargada, esperado: true);
+
+            var f = estadoSalud.Leer();
+            Assert.Equal(EstadoVigenciaTsl.Vigente, f.Vigencia);
+            Assert.Equal(inicio + VigilanteVigenciaTsl.Intervalo, f.UltimaComprobacion);
+        }
+        finally
+        {
+            await vigilante.StopAsync(CancellationToken.None);
+        }
+    }
+
     [Fact]
     public async Task RespetaLaCancelacionDelHostSinLanzar()
     {
@@ -90,12 +121,12 @@ public sealed class VigilanteVigenciaTslTests
         Assert.Null(await detencion);
     }
 
-    private static async Task EsperarHasta(Func<int> valorActual, int esperado, TimeSpan? margen = null)
+    private static async Task EsperarHasta<T>(Func<T> valorActual, T esperado, TimeSpan? margen = null)
     {
         var limite = DateTime.UtcNow + (margen ?? TimeSpan.FromSeconds(5));
         while (DateTime.UtcNow < limite)
         {
-            if (valorActual() == esperado) return;
+            if (Equals(valorActual(), esperado)) return;
             await Task.Delay(10);
         }
         Assert.Equal(esperado, valorActual());

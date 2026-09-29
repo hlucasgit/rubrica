@@ -109,6 +109,10 @@ builder.Services.AddSecureSignInternalHttpClient<IIdentidadServiceClient, Identi
 builder.Services.AddSecureSignInternalHttpClient<IAuditoriaServiceClient, AuditoriaServiceClient>(
     new Uri(serviciosInternos["AuditoriaApiUrl"]!), ActorServicio);
 
+// Health check de confianza IOFE (RUNBOOK.md 12.54, informe de preauditoría INDECOPI/IOFE, hallazgo P2-02):
+// singleton simple que VigilanteVigenciaTsl y el arranque van actualizando, y que SaludController expone en
+// GET /api/salud/tsl — nunca vuelve a evaluar nada por su cuenta, solo lee la última fotografía registrada.
+builder.Services.AddSingleton<EstadoSaludTsl>();
 builder.Services.AddHostedService<SecureSign.Signature.Api.VigilanteVigenciaTsl>();
 
 var app = builder.Build();
@@ -118,8 +122,10 @@ var app = builder.Build();
 // la actualización del archivo es manual y un servicio caído por eso sería peor que uno que avisa).
 {
     var lista = app.Services.GetRequiredService<ListaConfianzaIofe>();
-    var evaluacion = EvaluadorVigenciaTsl.Evaluar(lista, DateTimeOffset.UtcNow, app.Configuration.GetValue<bool>("ConfianzaIofe:FallarSiTslVencida"));
+    var ahora = DateTimeOffset.UtcNow;
+    var evaluacion = EvaluadorVigenciaTsl.Evaluar(lista, ahora, app.Configuration.GetValue<bool>("ConfianzaIofe:FallarSiTslVencida"));
     SecureSign.Signature.Api.VigilanteVigenciaTsl.Registrar(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SecureSign.ConfianzaIofe"), evaluacion);
+    app.Services.GetRequiredService<EstadoSaludTsl>().RegistrarVigencia(lista, evaluacion.Estado, ahora);
     if (evaluacion.DebeAbortarElArranque)
         throw new InvalidOperationException("La TSL de IOFE está vencida y ConfianzaIofe:FallarSiTslVencida=true — se rechaza el arranque. " + evaluacion.Mensaje);
 }
@@ -140,6 +146,7 @@ var app = builder.Build();
             app.Services.GetRequiredService<VerificadorRevocacionCrl>());
 
         foreach (var linea in revocacion.Evidencia) registro.LogInformation("Revocación del firmante de la TSL — {Linea}", linea);
+        app.Services.GetRequiredService<EstadoSaludTsl>().RegistrarRevocacionDelFirmante(revocacion.Combinado, DateTimeOffset.UtcNow);
 
         if (revocacion.Combinado == EstadoRevocacion.Revoked)
             throw new InvalidOperationException("El certificado que firma la TSL de IOFE está REVOCADO — se rechaza el arranque. " + string.Join(" | ", revocacion.Evidencia));

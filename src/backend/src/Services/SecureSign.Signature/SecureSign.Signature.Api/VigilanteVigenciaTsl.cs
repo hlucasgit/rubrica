@@ -7,7 +7,8 @@ namespace SecureSign.Signature.Api;
 /// lleva meses corriendo no se entera de otro modo de que la lista venció a mitad de camino. Solo avisa (registro);
 /// abortar el arranque es decisión de <c>Program.cs</c>, no de un servicio ya en marcha.
 /// </summary>
-public sealed class VigilanteVigenciaTsl(ListaConfianzaIofe lista, ILogger<VigilanteVigenciaTsl> registro, TimeProvider? reloj = null)
+public sealed class VigilanteVigenciaTsl(
+    ListaConfianzaIofe lista, ILogger<VigilanteVigenciaTsl> registro, TimeProvider? reloj = null, EstadoSaludTsl? estadoSalud = null)
     : BackgroundService
 {
     public static readonly TimeSpan Intervalo = TimeSpan.FromHours(6);
@@ -30,7 +31,12 @@ public sealed class VigilanteVigenciaTsl(ListaConfianzaIofe lista, ILogger<Vigil
         {
             // La primera evaluación ya la hizo el arranque; aquí solo las periódicas.
             while (await temporizador.WaitForNextTickAsync(detener))
-                Registrar(registro, EvaluadorVigenciaTsl.Evaluar(lista, tiempo.GetUtcNow(), fallarSiVencida: false));
+            {
+                var ahora = tiempo.GetUtcNow();
+                var evaluacion = EvaluadorVigenciaTsl.Evaluar(lista, ahora, fallarSiVencida: false);
+                Registrar(registro, evaluacion);
+                estadoSalud?.RegistrarVigencia(lista, evaluacion.Estado, ahora);
+            }
         }
         catch (OperationCanceledException) { /* apagado normal */ }
     }
