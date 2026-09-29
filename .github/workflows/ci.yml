@@ -10,6 +10,13 @@ name: CI — build, test y migraciones
 # intente tocar ese proyecto, y un job aparte en windows-latest valida que
 # el Firmador siga compilando.
 
+# Informe de preauditoría INDECOPI/IOFE (27/09/2026), hallazgo P3-01: las acciones fijadas en Node.js 20
+# generaban una advertencia en cada corrida ("forced to run on Node.js 24") porque GitHub ya no soporta ese
+# runtime. Actualizadas a las últimas versiones mayores que declaran node24 en su propio action.yml
+# (actions/checkout@v7, actions/setup-dotnet@v6, actions/upload-artifact@v7, gitleaks/gitleaks-action@v3) —
+# confirmado contra las notas de versión de cada una, sin cambios de comportamiento/entradas/salidas, solo el
+# runtime. Ver RUNBOOK.md 12.53.
+
 on:
   push:
     branches: [main]
@@ -28,12 +35,12 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Gitleaks — detección de secretos
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -55,9 +62,9 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
@@ -81,7 +88,7 @@ jobs:
           dotnet-CycloneDX src/backend/SecureSign.Backend.slnf -o sbom --exclude-test-projects -F Json -sn SecureSign-Backend -sv ${{ github.sha }}
 
       - name: Publicar SBOM del backend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-backend
           path: sbom/bom.json
@@ -140,9 +147,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
@@ -168,9 +175,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
@@ -202,7 +209,7 @@ jobs:
           $lineas | Set-Content -Path publish/SHA256SUMS.txt -Encoding utf8
 
       - name: Publicar artefacto (binario + SBOM + manifiesto)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: securesign-firmador-local-${{ github.sha }}
           path: |
@@ -270,7 +277,7 @@ jobs:
           if (Test-Path $ruta) { Remove-Item $ruta -Force }
 
       - name: Publicar instalador (MSI + manifiesto)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: securesign-firmador-local-instalador-${{ github.sha }}
           path: |
