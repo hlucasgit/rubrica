@@ -4,7 +4,7 @@ Consolida en una sola tabla, por dominio funcional, el resultado de `docs/08-cum
 
 Clasificación pedida para esta fase: **CUMPLE** (hecho y verificado) · **PARCIAL** (implementado con una limitación real y documentada) · **PENDIENTE** (no implementado, o bloqueado) · **NO APLICA** (fuera del alcance de acreditación congelado v1.0).
 
-Corte de este documento: commit `36e09b8` (2026-09-30), 299/299 pruebas unitarias en verde.
+Corte de este documento: commit `358260d` (2026-09-30), 299/299 pruebas unitarias en verde.
 
 ## A. Motor criptográfico y PAdES
 
@@ -103,6 +103,7 @@ Corte de este documento: commit `36e09b8` (2026-09-30), 299/299 pruebas unitaria
 | `main` verde de forma sostenida | **CUMPLE** | Historial de runs de CI |
 | `release/1.0` sincronizado con `main` | **CUMPLE** | 12.60, vía PR (no push directo) |
 | Build reproducible | **CUMPLE** | Documentado en cada fase de este RUNBOOK |
+| Expediente para INDECOPI (10 carpetas, fecha/versión/hash/responsable por evidencia) | **CUMPLE** | 12.68 — `scripts/Generar-Expediente.ps1`, generado bajo demanda desde las fuentes reales (nunca una copia estática); verificado en vivo, 27 archivos reales catalogados, incluida una corrida real de `dotnet test` y el SBOM real descargado del Release |
 
 ## J. Seguridad ofensiva
 
@@ -113,11 +114,11 @@ Corte de este documento: commit `36e09b8` (2026-09-30), 299/299 pruebas unitaria
 
 ## Resumen numérico
 
-Conteo real de las 55 filas de las 10 secciones anteriores (A–J):
+Conteo real de las 56 filas de las 10 secciones anteriores (A–J):
 
 | Clasificación | Filas |
 |---|---|
-| CUMPLE | 45 |
+| CUMPLE | 46 |
 | PARCIAL | 5 |
 | PENDIENTE | 4 |
 | NO APLICA | 1 |
