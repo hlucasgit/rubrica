@@ -153,6 +153,28 @@ public sealed class SecureSignClient : IDisposable
         Validacion = new ValidacionResource(this);
     }
 
+    // ---- Atajos de nivel superior (informe de trabajo del 30/09/2026, Agente 6) ----------------------------
+    // Delegan directamente a los recursos de abajo (Documentos/Firmas/Validacion) — no duplican lógica, solo
+    // acortan el quickstart (client.EnviarDocumentoAsync(...) en vez de client.Documentos.RegistrarAsync(...)).
+    // Para el resto de operaciones (obtener metadata, consultar pendientes, rechazar, etc.) seguir usando los
+    // recursos directamente — no todo merece un atajo de nivel superior.
+
+    /// <summary>Fuerza a obtener (o renovar) el token de acceso ahora, en vez de esperar a la primera llamada que lo necesite — útil para fallar rápido si las credenciales son inválidas.</summary>
+    public Task AutenticarAsync(CancellationToken ct = default) => ObtenerTokenAsync(ct);
+
+    /// <summary>Atajo de <see cref="DocumentosResource.RegistrarAsync"/>.</summary>
+    public Task<RegistrarDocumentoResponse> EnviarDocumentoAsync(
+        Stream archivo, string nombreArchivo, string? codigoExterno = null, Guid? usuarioSolicitanteId = null, CancellationToken ct = default)
+        => Documentos.RegistrarAsync(archivo, nombreArchivo, codigoExterno, usuarioSolicitanteId, ct);
+
+    /// <summary>Atajo de <see cref="FirmasResource.CrearSolicitudAsync"/>.</summary>
+    public Task<SolicitudFirmaResponse> SolicitarFirmaAsync(CrearSolicitudFirmaRequest solicitud, CancellationToken ct = default)
+        => Firmas.CrearSolicitudAsync(solicitud, ct);
+
+    /// <summary>Atajo de <see cref="ValidacionResource.ValidarPorCodigoAsync"/> — veredicto simple por código de verificación público. Para el expediente PAdES completo de un PDF, usar <c>Validacion.ValidarPdfAsync</c>.</summary>
+    public Task<ValidacionPublicaResponse> ValidarFirmaAsync(string codigoVerificacionPublico, CancellationToken ct = default)
+        => Validacion.ValidarPorCodigoAsync(codigoVerificacionPublico, ct);
+
     internal async Task<string> ObtenerTokenAsync(CancellationToken ct)
     {
         if (_accessToken is not null && DateTimeOffset.UtcNow < _expiraEn) return _accessToken;

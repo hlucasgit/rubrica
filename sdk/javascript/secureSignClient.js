@@ -52,6 +52,31 @@ class SecureSignClient {
     this.validacion = new ValidacionResource(this);
   }
 
+  // ---- Atajos de nivel superior (informe de trabajo del 30/09/2026, Agente 6) ------------------------------
+  // Delegan directamente a los recursos de arriba — no duplican lógica, solo acortan el quickstart
+  // (cliente.enviarDocumento(...) en vez de cliente.documentos.registrar(...)). Para el resto de operaciones
+  // seguir usando los recursos directamente.
+
+  /** Fuerza a obtener (o renovar) el token de acceso ahora, en vez de esperar a la primera llamada que lo necesite. */
+  autenticar() {
+    return this._obtenerToken();
+  }
+
+  /** Atajo de `documentos.registrar`. */
+  enviarDocumento(opciones) {
+    return this.documentos.registrar(opciones);
+  }
+
+  /** Atajo de `firmas.crearSolicitud`. */
+  solicitarFirma(opciones) {
+    return this.firmas.crearSolicitud(opciones);
+  }
+
+  /** Atajo de `validacion.validarPorCodigo` — veredicto simple por código de verificación público. Para el expediente PAdES completo de un PDF, usar `validacion.validarPdf`. */
+  validarFirma(codigoVerificacionPublico, signal) {
+    return this.validacion.validarPorCodigo(codigoVerificacionPublico, signal);
+  }
+
   async _fetchConTimeout(url, opciones) {
     const controlador = new AbortController();
     const temporizador = setTimeout(() => controlador.abort(), this._timeoutMs);
