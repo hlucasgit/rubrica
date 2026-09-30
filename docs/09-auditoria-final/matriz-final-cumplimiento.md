@@ -4,7 +4,7 @@ Consolida en una sola tabla, por dominio funcional, el resultado de `docs/08-cum
 
 Clasificación pedida para esta fase: **CUMPLE** (hecho y verificado) · **PARCIAL** (implementado con una limitación real y documentada) · **PENDIENTE** (no implementado, o bloqueado) · **NO APLICA** (fuera del alcance de acreditación congelado v1.0).
 
-Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitarias en verde.
+Corte de este documento: commit `36e09b8` (2026-09-30), 299/299 pruebas unitarias en verde.
 
 ## A. Motor criptográfico y PAdES
 
@@ -65,6 +65,7 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 | SAST (CodeQL) | **CUMPLE** | 12.19/12.43 — encontró y corrigió que el repositorio privado invalidaba el gate |
 | SCA (dependencias vulnerables) | **CUMPLE** | 12.19 — sin hallazgos en 34 proyectos |
 | SBOM (CycloneDX) por build | **CUMPLE** | 12.18 |
+| Evidencia (SBOM/manifiesto/instalador) permanente por release, no solo 90 días de Actions | **CUMPLE** | 12.65 — assets del Release vía `gh release upload --clobber`, verificado en vivo contra `securesign-sfd-v1.0.0` real; el disparo automático por push de tag aún no se ejecutó de punta a punta (ver alcance no cubierto en el RUNBOOK) |
 | Ramas protegidas contra force-push/borrado | **CUMPLE** | 12.44 |
 
 ## F. Firmador Local (aplicación de escritorio)
@@ -112,11 +113,11 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 
 ## Resumen numérico
 
-Conteo real de las 54 filas de las 10 secciones anteriores (A–J):
+Conteo real de las 55 filas de las 10 secciones anteriores (A–J):
 
 | Clasificación | Filas |
 |---|---|
-| CUMPLE | 44 |
+| CUMPLE | 45 |
 | PARCIAL | 5 |
 | PENDIENTE | 4 |
 | NO APLICA | 1 |
