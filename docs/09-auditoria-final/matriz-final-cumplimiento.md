@@ -92,7 +92,7 @@ Corte de este documento: commit `36e09b8` (2026-09-30), 299/299 pruebas unitaria
 |---|---|---|
 | Cero referencias a "Rúbrica"/"SecureSign Perú" en artefactos distribuibles | **CUMPLE** | 12.41 — verificado de nuevo en esta consolidación, cero coincidencias reales |
 | Nombre del repositorio GitHub | **CUMPLE** | 12.62 — `hlucasgit/securesign-peru` |
-| SDKs (.NET/JS/Python) funcionales contra la API real | **CUMPLE** (forma agrupada por recurso, no plana) | 12.47 — bug real de SDK JS encontrado y corregido en el camino |
+| SDKs (.NET/JS/Python) funcionales contra la API real | **CUMPLE** | 12.47 (bug real de SDK JS encontrado y corregido) + 12.67 (atajos planos agregados sobre el agrupado por recurso, a pedido explícito del usuario) — ambos estilos disponibles, `docs/05-integracion/sdk/README.md` |
 | Manuales de usuario, administrador e integración | **CUMPLE** | `docs/08-cumplimiento/manual-*.md` |
 | Auditoría documentación-vs-código | **PARCIAL** | 12.55 — 8 fuentes principales corregidas; manuales `.docx` distribuibles y `docs/02-04/06` sin re-auditar línea por línea con agente dedicado |
 
