@@ -58,7 +58,7 @@ Registro consolidado de cada hallazgo real identificado en el proceso de preaudi
 | Hallazgo | Severidad | Bloqueado por | Siguiente paso |
 |---|---|---|---|
 | Firma Authenticode real del EXE/MSI | Alto (para distribución a terceros) | Procura | Comprar certificado de firma de código (ver `evidencias-requeridas.md` para costo aproximado y opciones) |
-| Sin pentest externo | Alto (requisito de acreditación) | Procura | Contratar firma de seguridad — alcance sugerido en `docs/10-pentest/` (pendiente de construir) |
+| Sin pentest externo | Alto (requisito de acreditación) | Procura | Contratar firma de seguridad — alcance, modelo de atacante y casos de prueba concretos ya listos en `docs/10-pentest/` (RUNBOOK 12.66) |
 | Política EKU/CertificatePolicies no exigida (`Exigir=false`) | Medio | Cobertura insuficiente (3 de N EC acreditadas confirmadas) | Confirmar OID de más EC acreditadas de la IOFE antes de activar `Exigir` |
 | Sin vault de secretos con rotación/auditoría de acceso | Medio | Decisión de arquitectura | Usuario define proveedor (Azure Key Vault / HashiCorp / AWS Secrets Manager) |
 | Sin IdP externo acreditado (Authorization Code/PKCE) | Bajo (fuera de alcance v1.0) | Decisión de producto | Diferido a propósito — la plataforma es B2B (`client_credentials`), no requiere login humano hoy |
