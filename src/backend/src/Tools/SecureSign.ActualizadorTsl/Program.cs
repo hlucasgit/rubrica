@@ -53,7 +53,7 @@ if (File.Exists(rutaTslVigente))
     }
 }
 
-using var http = new HttpClient();
+using var http = new HttpClient(GuardiaSsrf.CrearManejador()); // RUNBOOK.md 12.63 — defensa en profundidad, mismo motivo que Signature.Api
 var actualizador = new ActualizadorTsl(http, new VerificadorRevocacionOcsp(http), new VerificadorRevocacionCrl(http));
 
 var resultado = await actualizador.ActualizarAsync(new Uri(urlDescarga), rutaTslVigente, raizConfiable, listaActual);
