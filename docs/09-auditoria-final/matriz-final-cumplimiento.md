@@ -80,6 +80,7 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 | Control | Estado | Evidencia (RUNBOOK) |
 |---|---|---|
 | Pipeline de firma Authenticode (construcción, verificación, CI) | **CUMPLE** (el pipeline en sí) | 12.35 — probado de punta a punta con certificado de prueba y sello de tiempo real de DigiCert |
+| Verificador independiente de firma de código (para un tercero, sin conocer quién firmó) | **CUMPLE** | 12.64 — `Verificar-FirmaCodigo.ps1`, `docs/07-seguridad/code-signing.md`; probado en vivo, encontró y corrigió 2 bugs reales |
 | Firma Authenticode real del EXE/MSI | **PENDIENTE** | Bloqueado por procura — requiere comprar un certificado de firma de código (ver `evidencias-requeridas.md`) |
 | Instalador MSI (por usuario, sin administrador) | **CUMPLE** | 12.35, probado en runner limpio de CI |
 | Versionado SemVer separado del metadato de build | **CUMPLE** | 12.45 |
@@ -111,11 +112,11 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 
 ## Resumen numérico
 
-Conteo real de las 53 filas de las 10 secciones anteriores (A–J):
+Conteo real de las 54 filas de las 10 secciones anteriores (A–J):
 
 | Clasificación | Filas |
 |---|---|
-| CUMPLE | 43 |
+| CUMPLE | 44 |
 | PARCIAL | 5 |
 | PENDIENTE | 4 |
 | NO APLICA | 1 |
