@@ -1751,3 +1751,24 @@ Tras corregir ambos, se confirmaron en vivo los tres escenarios reales: certific
 **Verificado**: `.NET` compilado de verdad contra un proyecto de prueba descartable (mismo patrón de verificación que RUNBOOK 12.47) — 0 errores. `JavaScript`: cargado con `require()` real, instanciado un cliente real, confirmados los 4 métodos nuevos como funciones reales en la instancia. `Python`: `ast.parse` + `import` real del módulo, confirmados los 4 métodos en la clase. Ningún cambio a la lógica de red/autenticación existente — los métodos nuevos son delegación pura, sin superficie nueva que pueda fallar de forma distinta a los recursos que ya estaban probados (RUNBOOK 12.47).
 
 **Alcance no cubierto**: no se volvió a correr la batería completa de pruebas de punta a punta contra el doble de prueba de RUNBOOK 12.47 (autenticación + 13 operaciones + casos de error) — no hacía falta, los atajos nuevos no tocan ninguno de esos caminos, solo los reexponen con otro nombre; verificar que compilan/cargan y llaman al método correcto ya cubre el 100% de la lógica nueva (que es, literalmente, una línea de delegación por atajo).
+
+### 12.68 Expediente para INDECOPI generado bajo demanda (Agente 8 — informe de trabajo del 30/09/2026)
+
+**Problema**: el informe pide una carpeta `/expediente-securesign/` con 10 subcarpetas numeradas, cada evidencia con fecha/versión/hash/responsable/resultado. El contenido real ya vive en `docs/01-08`, `docs/09-auditoria-final` y `docs/10-pentest` — versionar una SEGUNDA copia estática en el repositorio crea dos lugares que se pueden desincronizar (exactamente el tipo de problema que esta sesión lleva corrigiendo todo el tiempo: documentación que dice una cosa y el código otra). Ya se había dejado esta decisión pendiente en `docs/09-auditoria-final/evidencias-requeridas.md` (Agente 1) — esta sección la resuelve.
+
+**Qué se construyó**: `scripts/Generar-Expediente.ps1` — arma `expediente-securesign/` (en la raíz, ignorado por git) copiando desde las fuentes reales del repositorio, borrando y reconstruyendo por completo en cada corrida para que siempre refleje el commit actual, nunca un estado viejo:
+- `01_Arquitectura` ← `docs/01-arquitectura/`
+- `02_Seguridad` (+ `pentest/`) ← `docs/07-seguridad/` + `docs/10-pentest/`
+- `03_Pruebas` ← corrida REAL de `dotnet test` en el momento de generar el expediente, no una copia de un resultado viejo
+- `04_Criptografia` ← `docs/03-legal-normativo/` + una referencia directa a dónde vive el código real (`SecureSign.Trust`, `SecureSign.Crypto`) — el expediente cita el repositorio, no lo duplica completo
+- `05_Manuales`/`06_Control_Cambios` ← `docs/08-cumplimiento/`
+- `07_SBOM` ← con `-DescargarSbomDelRelease <tag>`, descarga el SBOM/manifiesto REALES ya publicados como asset permanente del Release (RUNBOOK.md 12.65) vía `gh release download` — no los regenera, usa los mismos que ya están públicos
+- `09_Release` ← `RELEASE_NOTES.md`
+- `10_Evidencias` ← `docs/09-auditoria-final/`
+- `MANIFIESTO.csv` — cada archivo copiado, con fecha/versión (commit corto)/hash SHA-256 real/responsable/resultado, tal como pide el informe
+
+**Hallazgo real encontrado al probarlo, no en producción**: `Join-Path $raiz $Origen '*'` falla en Windows PowerShell 5.1 — `Join-Path` solo acepta dos segmentos (`-Path`/`-ChildPath`), no tres; el error real fue "No se encuentra ningún parámetro de posición que acepte el argumento '*'". Corregido con `"$(Join-Path $raiz $Origen)\*"`.
+
+**Verificado en vivo, de punta a punta, contra el repositorio real**: `./scripts/Generar-Expediente.ps1 -DescargarSbomDelRelease securesign-sfd-v1.0.0` — 27 archivos reales catalogados, incluida una corrida real de `dotnet test` (299/299 en verde, capturada en `03_Pruebas/resultado-dotnet-test.txt`) y el SBOM real descargado del Release `securesign-sfd-v1.0.0` (RUNBOOK.md 12.65) con los tamaños exactos que se subieron entonces (`sbom-backend-bom.json` 195.824 B, `sbom-firmador-local-bom.json` 102.658 B) — confirma que ambos hallazgos (12.65 y este) encajan correctamente de punta a punta, no solo por separado.
+
+**Alcance no cubierto**: la carpeta de salida no se versiona (a propósito) — quien necesite el expediente lo genera localmente o en CI antes de presentarlo, nunca lo descarga de una copia vieja del repositorio. No se automatizó la generación en CI todavía (por ejemplo, como artefacto adicional del job de release, RUNBOOK.md 12.65) — queda como evolución futura si se decide que cada release debe traer el expediente ya armado.

@@ -28,3 +28,7 @@ src/backend/contrato_dnie_firmado_descargado.txt
 ## Overrides locales de docker-compose (pueden apuntar a hardware/rutas de esta máquina)
 src/backend/.env
 artifacts/
+
+## Expediente INDECOPI: se genera bajo demanda (scripts/Generar-Expediente.ps1, RUNBOOK.md 12.68) desde
+## docs/01-08 y docs/09-10 — nunca una copia estática versionada, se desactualizaría.
+/expediente-securesign/
