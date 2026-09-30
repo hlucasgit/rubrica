@@ -17,10 +17,19 @@ name: CI — build, test y migraciones
 # confirmado contra las notas de versión de cada una, sin cambios de comportamiento/entradas/salidas, solo el
 # runtime. Ver RUNBOOK.md 12.53.
 
+# Informe de trabajo del 30/09/2026 (Agente 4, DevSecOps): "generación automática de SBOM por release" y
+# "almacenamiento de evidencias" — un SBOM/manifiesto/instalador que solo vive como artefacto de Actions
+# expira a los 90 días (retention-days de arriba); un Release de GitHub no expira. `tags: securesign-sfd-v*`
+# hace que empujar el tag de un release (RUNBOOK.md 12.62/12.65) dispare `release-manifest-firmador` una vez
+# más, esta vez adjuntando SBOM + manifiesto + MSI como assets PERMANENTES del propio Release, no solo como
+# artefacto de Actions. `workflow_dispatch` deja re-adjuntar evidencia a un tag/Release YA existente sin
+# necesidad de crear un tag nuevo desechable — así es como se verificó esto en vivo (ver RUNBOOK.md 12.65).
 on:
   push:
     branches: [main]
+    tags: ["securesign-sfd-v*"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   # Informe de preauditoría INDECOPI/IOFE (27/09/2026), hallazgo P1-05: no
@@ -167,12 +176,19 @@ jobs:
   # firma de código real (trámite de compra/identidad jurídica, no de código):
   # el pipeline de firma, el instalador MSI y su prueba ya existen (ver
   # RUNBOOK.md 12.35) y se activan solos cuando exista el secreto CODESIGN_PFX_BASE64.
-  # Solo corre en push a main — no en cada PR — porque es, conceptualmente,
-  # el job "CI Release" que el informe pide separado del build de validación.
+  # Corre en push a main, en push de un tag de release (securesign-sfd-v*) y bajo demanda
+  # (workflow_dispatch) — no en cada PR — porque es, conceptualmente, el job "CI Release" que el informe pide
+  # separado del build de validación. El paso final ("Adjuntar evidencia al Release") solo se ejecuta cuando
+  # el disparador fue un tag o un workflow_dispatch apuntando a uno — un push a main normal no tiene ningún
+  # Release al que adjuntar nada.
   release-manifest-firmador:
     needs: [backend-build-test-migrate, firmador-local-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/securesign-sfd-v')))
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v7
@@ -284,3 +300,32 @@ jobs:
             artifacts/firmador-local/*.msi
             artifacts/firmador-local/SHA256SUMS-instalador.txt
           retention-days: 90
+
+      # Informe de trabajo del 30/09/2026 (Agente 4, DevSecOps): "almacenamiento de evidencias" — un artefacto
+      # de Actions expira a los 90 días (retention-days de arriba); un Release de GitHub no expira. Solo corre
+      # cuando el disparador es el tag de un release (push del tag o workflow_dispatch apuntando a él) — un
+      # Release ya debe existir para ese tag (creado a mano al cortar el release, RUNBOOK.md 12.62), este paso
+      # solo le adjunta evidencia, nunca crea el Release. --clobber hace el paso idempotente: correrlo de nuevo
+      # sobre el mismo tag reemplaza los archivos en vez de fallar porque ya existen.
+      - name: Descargar SBOM del backend (generado en el otro job de este mismo run)
+        if: startsWith(github.ref, 'refs/tags/securesign-sfd-v')
+        uses: actions/download-artifact@v7
+        with:
+          name: sbom-backend
+          path: sbom-backend
+
+      - name: Adjuntar evidencia al Release (SBOM backend + Firmador Local, manifiestos, instalador)
+        if: startsWith(github.ref, 'refs/tags/securesign-sfd-v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Copy-Item sbom-backend/bom.json sbom-backend-bom.json
+          Copy-Item sbom/bom.json sbom-firmador-local-bom.json
+          gh release upload "${{ github.ref_name }}" `
+            sbom-backend-bom.json `
+            sbom-firmador-local-bom.json `
+            publish/SHA256SUMS.txt `
+            artifacts/firmador-local/*.msi `
+            artifacts/firmador-local/SHA256SUMS-instalador.txt `
+            --repo "${{ github.repository }}" --clobber
