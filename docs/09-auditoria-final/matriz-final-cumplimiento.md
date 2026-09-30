@@ -108,7 +108,7 @@ Corte de este documento: commit `36e09b8` (2026-09-30), 299/299 pruebas unitaria
 
 | Control | Estado | Evidencia |
 |---|---|---|
-| Pentest externo | **PENDIENTE** | No contratado — procura del usuario, ver `evidencias-requeridas.md`. Documentación de preparación en `docs/10-pentest/` (Agente 5, pendiente de construir) |
+| Pentest externo | **PENDIENTE** (preparación CUMPLE) | No contratado — procura del usuario, ver `evidencias-requeridas.md`. Preparación completa en `docs/10-pentest/` (RUNBOOK 12.66): alcance, modelo de atacante (5 perfiles reales), casos de prueba concretos por área con lo ya cubierto internamente marcado aparte de lo que queda como foco real para el pentester |
 | Vulnerabilidades encontradas internamente cerradas | **CUMPLE** (las conocidas hasta hoy) | SSRF (12.63) es la única vulnerabilidad de seguridad real encontrada fuera de un informe formal en esta sesión, y ya está cerrada |
 
 ## Resumen numérico

@@ -104,7 +104,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Matriz INDECOPI | Sí | 🟢 (este documento) |
 | SBOM | Sí | 🟢 (RUNBOOK 12.18; adjunto permanente al Release desde RUNBOOK 12.65) |
 | SAST/SCA | Sí | 🟢 (RUNBOOK 12.19) |
-| Pentest | Recomendado | 🔴 |
+| Pentest | Recomendado | 🔴 (preparación lista — `docs/10-pentest/`: alcance, modelo de atacante, casos de prueba concretos con lo ya cubierto internamente vs foco recomendado) |
 | TSA | Según alcance | 🟢 |
 | XAdES | No para v1 | ⚫ |
 | CAdES independiente | No para v1 | ⚫ |
