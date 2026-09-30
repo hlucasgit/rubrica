@@ -44,9 +44,13 @@ builder.Services.AddSingleton<IEstampadorVisualDocumento, EstampadorVisualDocume
 // firmante — nunca solo la operación criptográfica. Las raíces y la TSL se
 // cargan una vez al iniciar desde ConfianzaIofe/ (ver ese .csproj); los tres
 // clientes HTTP hacen llamadas de red reales a RENIEC/INDECOPI.
-builder.Services.AddHttpClient<DescargadorCertificadosIntermedios>();
-builder.Services.AddHttpClient<VerificadorRevocacionCrl>();
-builder.Services.AddHttpClient<VerificadorRevocacionOcsp>();
+//
+// GuardiaSsrf (RUNBOOK.md 12.63): estos tres siguen URLs declaradas DENTRO de un certificado (AIA/CRL) — un
+// certificado que un atacante controla, vía el validador público (POST /api/validador/pdf, sin token). Sin esto,
+// cualquiera podría hacer que el servidor golpee metadata de nube o un servicio interno de Docker.
+builder.Services.AddHttpClient<DescargadorCertificadosIntermedios>().ConfigurePrimaryHttpMessageHandler(GuardiaSsrf.CrearManejador);
+builder.Services.AddHttpClient<VerificadorRevocacionCrl>().ConfigurePrimaryHttpMessageHandler(GuardiaSsrf.CrearManejador);
+builder.Services.AddHttpClient<VerificadorRevocacionOcsp>().ConfigurePrimaryHttpMessageHandler(GuardiaSsrf.CrearManejador);
 builder.Services.AddSingleton(_ => AlmacenRaicesConfiables.CargarDesdeDirectorio(
     Path.Combine(AppContext.BaseDirectory, "ConfianzaIofe", "raices")));
 // La TSL se carga VERIFICANDO su firma XAdES contra la raíz oficial de INDECOPI (RUNBOOK.md 12.38) y se hace
