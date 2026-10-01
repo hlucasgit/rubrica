@@ -36,7 +36,7 @@ El sistema procesa datos personales sensibles (documento de identidad, biometrí
 |---|---|
 | **ETSI EN 319 xxx** (marco general de servicios de confianza) | Referencia de buenas prácticas para el diseño de los servicios de Firma, Certificados y Evidencia, aun sin operar bajo jurisdicción eIDAS |
 | **eIDAS (UE)** | Modelo de referencia para la clasificación de niveles de firma (simple/avanzada/cualificada) — análogo funcional a la clasificación de la Ley 27269, útil si se busca interoperabilidad con contrapartes europeas |
-| **XAdES / CAdES / PAdES** | Formatos de firma avanzada embebida en XML, CMS y PDF respectivamente — el Servicio Criptográfico implementa PAdES como formato primario (documentos PDF) y CAdES para firma de archivos genéricos/lotes |
+| **XAdES / CAdES / PAdES** | Formatos de firma avanzada embebida en XML, CMS y PDF respectivamente — SecureSign implementa PAdES real (B/T/LT/LTA, ver `src/backend/RUNBOOK.md` 12.8/12.14/12.24/12.25/12.70) como único formato de firma embebida; el CMS/CAdES-BES que usa internamente (`SecureSign.Pades.CmsBuilder`) es la base de ese PAdES, no un formato independiente para archivos genéricos/lotes — esa variante standalone no está implementada (ver `docs/08-cumplimiento/matriz-cumplimiento-indecopi.md`, fila "CAdES independiente") |
 | **RFC 5280** | Perfil de certificados X.509 v3 y listas de revocación (CRL) consumido por el Servicio de Certificados |
 | **RFC 3161** | Protocolo de sellado de tiempo (TSA), usado por el Motor de Evidencia para el anclaje periódico del hash-chain |
 | **OCSP (RFC 6960)** | Verificación de estado de revocación en tiempo real, preferido sobre CRL por latencia, con CRL como respaldo offline |
