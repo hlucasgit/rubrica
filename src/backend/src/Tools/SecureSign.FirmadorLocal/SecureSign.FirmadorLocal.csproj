@@ -15,7 +15,7 @@
     <Authors>SecureSign</Authors>
     <Product>SecureSign Firmador Local</Product>
     <AssemblyTitle>SecureSign Firmador Local</AssemblyTitle>
-    <Description>Firmador Local de SecureSign: firma documentos con el DNIe u otro token PKCS#11; el PIN nunca sale de este equipo.</Description>
+    <Description>Firmador Local de SecureSign: firma documentos con el DNIe, otro token PKCS#11, o un certificado de archivo (.pfx); el PIN/contraseña nunca sale de este equipo.</Description>
     <Copyright>© 2026 SecureSign</Copyright>
     <NeutralLanguage>es-PE</NeutralLanguage>
 

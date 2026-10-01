@@ -50,7 +50,7 @@ internal sealed class VentanaFirma : Form
 
         var avisoPin = new Label
         {
-            Text = "Tu PIN se usa solo en esta máquina para firmar — nunca se envía a SecureSign.",
+            Text = "Tu PIN o contraseña se usa solo en esta máquina para firmar — nunca se envía a SecureSign.",
             AutoSize = false,
             Location = new Point(20, 96),
             Size = new Size(480, 18),
@@ -67,7 +67,7 @@ internal sealed class VentanaFirma : Form
         if (_listaCertificados.Items.Count > 0)
             _listaCertificados.SelectedIndex = 0;
 
-        var etiquetaPin = new Label { Text = "PIN de la tarjeta/token:", AutoSize = true, Location = new Point(20, 286) };
+        var etiquetaPin = new Label { Text = "PIN de la tarjeta/token o contraseña del certificado:", AutoSize = true, Location = new Point(20, 286) };
         _campoPin.Location = new Point(20, 308);
         _campoPin.Size = new Size(220, 24);
         _campoPin.UseSystemPasswordChar = true;
