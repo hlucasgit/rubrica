@@ -139,6 +139,7 @@ public sealed class DocumentosController(ISender mediator, IAlmacenamientoDocume
     /// un CMS/PAdES real incrustado (ver FirmarLocalHandler).
     /// </summary>
     [HttpPut("{id:guid}/firmado-pades")]
+    [RequestSizeLimit(100 * 1024 * 1024)]
     public async Task<IActionResult> GuardarFirmadoPades(Guid id, [FromBody] GuardarFirmadoPadesRequest body, CancellationToken ct)
     {
         var tenant = User.ObtenerTenantContext();
