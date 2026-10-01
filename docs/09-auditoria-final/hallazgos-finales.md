@@ -54,6 +54,7 @@ Registro consolidado de cada hallazgo real identificado en el proceso de preaudi
 | Flake real en `VigilanteVigenciaTslTests` (esperaba un proxy del logger, no la condición real) | N/A (prueba) | RUNBOOK 12.54 |
 | Bug real del SDK JavaScript: `FormData` de Node exige `Blob`, no `Buffer` crudo | Bajo | RUNBOOK 12.47 |
 | Conclusión propia errónea: "la TSL real de INDECOPI no verifica" | N/A (autocorrección) | RUNBOOK 12.38 — era un `new SignedXml(documento)` en vez de `new SignedXml(elementoFirma)`, no un problema de INDECOPI |
+| `marco-legal-peru.md` afirmaba CAdES independiente para "archivos genéricos/lotes" (no implementado); `arquitectura-white-label.md` describía el CORS del Gateway como "política abierta" (desactualizado desde 12.31); manual técnico de integración `.docx` no documentaba `sellosDeArchivo`/sello de tiempo ni los atajos planos del SDK | Bajo (documentación) | RUNBOOK 12.71 |
 
 ## 2. Hallazgos abiertos (con dueño y siguiente paso claro)
 
@@ -65,8 +66,7 @@ Registro consolidado de cada hallazgo real identificado en el proceso de preaudi
 | Sin vault de secretos con rotación/auditoría de acceso | Medio | Decisión de arquitectura | Usuario define proveedor (Azure Key Vault / HashiCorp / AWS Secrets Manager) |
 | Sin IdP externo acreditado (Authorization Code/PKCE) | Bajo (fuera de alcance v1.0) | Decisión de producto | Diferido a propósito — la plataforma es B2B (`client_credentials`), no requiere login humano hoy |
 | PKCS#11 automatizado no corre en CI | Bajo | Toolchain (SoftHSM2 no tiene binario Windows) | Aceptado como limitación documentada — reproducible localmente |
-| Manuales `.docx` distribuibles y `docs/02/03/04/06` sin re-auditar línea por línea | Bajo | Alcance no cubierto en 12.55 | Repetir el patrón de auditoría en paralelo de 12.55 sobre esas fuentes |
 
 ## 3. Lectura para el expediente
 
-De 7 hallazgos abiertos, **5 son ejecutables sin depender de un tercero** (bajan de PENDIENTE a CUMPLE con trabajo de ingeniería, no de procura) y **2 dependen de una compra externa** (certificado Authenticode, pentest). Ningún hallazgo abierto es de severidad Crítica — el más alto (Authenticode, pentest) es Alto, y ambos están fuera del control directo del equipo de desarrollo, no representan una brecha de diseño sin resolver.
+De 6 hallazgos abiertos, **2 dependen de una compra externa** (certificado Authenticode, pentest), **2 son decisiones que le corresponden al usuario** (proveedor de vault de secretos, cobertura de OID de más EC acreditadas antes de activar `Exigir`), y **2 son limitaciones aceptadas a propósito, no trabajo pendiente** (IdP externo diferido por ser fuera de alcance v1.0, PKCS#11 en CI bloqueado por toolchain sin binario Windows). Ningún hallazgo abierto es de severidad Crítica — el más alto (Authenticode, pentest) es Alto, y ninguno representa una brecha de diseño sin resolver: todos están, por distintas razones explícitas, fuera del control directo del trabajo de ingeniería de esta sesión.
