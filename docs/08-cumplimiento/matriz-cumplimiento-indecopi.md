@@ -102,7 +102,7 @@ Leyenda: 🟢 hecho y verificado · 🟡 parcial · 🔴 pendiente · ⚫ exclui
 | Manual administrador | Sí | 🟢 (`manual-administrador.md`) |
 | Manual integración | Sí | 🟢 (`docs/05-integracion/manual-integracion-api.md`, base existente) |
 | Matriz INDECOPI | Sí | 🟢 (este documento) |
-| SBOM | Sí | 🟢 (RUNBOOK 12.18; adjunto permanente al Release desde RUNBOOK 12.65) |
+| SBOM | Sí | 🟢 (RUNBOOK 12.18; adjunto permanente al Release desde RUNBOOK 12.65) — **hallazgo real** (RUNBOOK 12.69): el SBOM del backend se publicaba VACÍO en CI desde 12.18 (`.slnf` con `\`, `dotnet-CycloneDX` no lo normaliza en Linux, "Found 0 packages" sin fallar); corregido y verificado con 120 componentes reales |
 | SAST/SCA | Sí | 🟢 (RUNBOOK 12.19) |
 | Pentest | Recomendado | 🔴 (preparación lista — `docs/10-pentest/`: alcance, modelo de atacante, casos de prueba concretos con lo ya cubierto internamente vs foco recomendado) |
 | TSA | Según alcance | 🟢 |

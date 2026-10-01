@@ -47,6 +47,7 @@ Registro consolidado de cada hallazgo real identificado en el proceso de preaudi
 | Hallazgo | Severidad | Cierre |
 |---|---|---|
 | **SSRF vía URL declarada dentro de un certificado (AIA/CRL)** — `POST /api/validador/pdf`, público y sin token, seguía la URL de cualquier certificado subido antes de saber si era confiable; permitía apuntar a metadata de nube o a la red interna de Docker | **Alto** (OWASP A10:2021) | RUNBOOK 12.63 — `GuardiaSsrf`, bloqueo a nivel de socket, 18 pruebas nuevas |
+| **SBOM del backend publicado vacío en CI desde que se introdujo** — `dotnet-CycloneDX` no normaliza las rutas `\` de un `.slnf` en Linux, "Found 0 packages" sin fallar nunca; nadie había inspeccionado el contenido real del artefacto | Medio (integridad de la cadena de suministro declarada, no explotable directamente) | RUNBOOK 12.69 — corregido, verificado con 120 componentes reales, re-subido al Release v1.0.1 |
 | `TokenExchangeHandler` no ponía ningún header `Authorization` en llamadas salientes disparadas por peticiones anónimas | Medio | RUNBOOK 12.16 |
 | Test-double HTTP propio no decodificaba `Transfer-Encoding: chunked` (bug del harness de prueba, no de producción) | N/A (prueba) | Corregido en el mismo commit del SDK .NET |
 | Flake real en `VigilanteVigenciaTslTests` (esperaba un proxy del logger, no la condición real) | N/A (prueba) | RUNBOOK 12.54 |
