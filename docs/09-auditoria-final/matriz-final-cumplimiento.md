@@ -64,7 +64,7 @@ Corte de este documento: commit `358260d` (2026-09-30), 299/299 pruebas unitaria
 | Secret scanning dedicado (Gitleaks) | **CUMPLE** | 12.42 |
 | SAST (CodeQL) | **CUMPLE** | 12.19/12.43 — encontró y corrigió que el repositorio privado invalidaba el gate |
 | SCA (dependencias vulnerables) | **CUMPLE** | 12.19 — sin hallazgos en 34 proyectos |
-| SBOM (CycloneDX) por build | **CUMPLE** | 12.18 |
+| SBOM (CycloneDX) por build | **CUMPLE** | 12.18 — **hallazgo real** (12.69): el SBOM del backend se publicaba vacío en CI desde que se introdujo (bug de `dotnet-CycloneDX` con rutas `\` de un `.slnf` en Linux, nunca fallaba el paso); corregido y verificado con 120 componentes reales, re-subido al Release v1.0.1 |
 | Evidencia (SBOM/manifiesto/instalador) permanente por release, no solo 90 días de Actions | **CUMPLE** | 12.65 — assets del Release vía `gh release upload --clobber`, verificado en vivo contra `securesign-sfd-v1.0.0` real; el disparo automático por push de tag aún no se ejecutó de punta a punta (ver alcance no cubierto en el RUNBOOK) |
 | Ramas protegidas contra force-push/borrado | **CUMPLE** | 12.44 |
 
