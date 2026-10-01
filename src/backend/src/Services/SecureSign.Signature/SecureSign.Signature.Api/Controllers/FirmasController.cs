@@ -226,6 +226,7 @@ public sealed class FirmasController(ISender mediator) : ControllerBase
     /// certificado (DNIe u otro token). El PIN nunca llega a este servicio.
     /// </summary>
     [HttpPost("{id:guid}/flujos/{flujoId:guid}/completar-firma-local")]
+    [RequestSizeLimit(100 * 1024 * 1024)]
     public async Task<IActionResult> CompletarFirmaLocal(Guid id, Guid flujoId, [FromBody] FirmarLocalRequest body, CancellationToken ct)
     {
         var tenant = User.ObtenerTenantContext();

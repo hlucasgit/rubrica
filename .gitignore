@@ -36,3 +36,6 @@ src/backend/SecureSign.Backend.linux.slnf
 ## docs/01-08 y docs/09-10 — nunca una copia estática versionada, se desactualizaría.
 /expediente-securesign/
 /expediente-securesign.zip
+
+## Build local del Firmador Local (dotnet publish, RUNBOOK.md 12.3/12.70) — se regenera bajo demanda
+src/backend/publish-firmador-local/

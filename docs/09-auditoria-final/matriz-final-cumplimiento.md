@@ -14,7 +14,7 @@ Corte de este documento: commit `358260d` (2026-09-30), 299/299 pruebas unitaria
 | Multifirma incremental preservando firmas previas | **CUMPLE** | 12.11 — 20 firmas sucesivas, las 20 siguen válidas tras cada incremento |
 | CMS/CAdES embebido correcto | **CUMPLE** | `CmsBuilder`, bug real de truncamiento encontrado y corregido en 12.15 |
 | Validador independiente (no reutiliza el código que firma) | **CUMPLE** | `SecureSign.Validator` + `POST /api/validador/pdf`, 12.12; visor web propio, 12.20 |
-| PAdES-T/LT/LTA verificado con firma real (no solo software) | **PARCIAL** | Verificado de punta a punta con clave de software (109 pruebas + prueba de integración 12.33); no se ejecutó el flujo LT/LTA completo con el DNIe físico en esta sesión (sí se hizo una firma simple real con DNIe, 12.61, pero por un camino que no pasa por LT/LTA) |
+| PAdES-T/LT/LTA verificado con firma real (no solo software) | **CUMPLE** | Verificado de punta a punta con el DNIe físico real (12.70) — encontró y corrigió un hallazgo real (PDF con DSS descartado en silencio por un límite de tamaño de petición faltante); validador independiente confirma los tres niveles (T/LT/LTA) contra el certificado real de RENIEC, sin consultar red para LT |
 
 ## B. Confianza IOFE (cadena, TSL, CRL, OCSP, revocación, política)
 
