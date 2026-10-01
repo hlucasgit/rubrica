@@ -14,6 +14,8 @@ Autenticación OAuth2 `client_credentials` (con caché del token), registro y de
 
 Los tres exponen: timeout configurable por petición, cancelación (`CancellationToken` en .NET, `AbortSignal` en JS, `timeout` de `requests` en Python), y una excepción propia (`SecureSignException`/`SecureSignError`) que expone el `codigo`/`mensaje` reales del envelope de error de la API y, en un 429, el `Retry-After`.
 
+Además de los recursos agrupados (`client.Documentos`, `client.Firmas`...), cada SDK trae atajos planos de nivel superior (`AutenticarAsync`/`EnviarDocumentoAsync`/`SolicitarFirmaAsync`/`ValidarFirmaAsync`, y sus equivalentes en JS/Python) que delegan directo a esos mismos recursos — ver `docs/05-integracion/sdk/README.md` para el quickstart con ambos estilos.
+
 ## Qué NO cubren
 
 Los endpoints de evidencia y auditoría (`GET /api/evidencias/...`, `GET /api/auditoria/...`) no tienen método propio — son consultas ocasionales, no parte del flujo de firma; llamarlos por HTTP directo con el mismo token. Tampoco hay wrapper para el flujo de lote (`POST /api/firmas/lotes/firmar`) ni para el Firmador Local (ticket de firma local) — ver RUNBOOK.md 12.13 para ese flujo alternativo.

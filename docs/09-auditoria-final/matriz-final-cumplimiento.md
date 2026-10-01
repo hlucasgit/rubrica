@@ -4,7 +4,7 @@ Consolida en una sola tabla, por dominio funcional, el resultado de `docs/08-cum
 
 Clasificación pedida para esta fase: **CUMPLE** (hecho y verificado) · **PARCIAL** (implementado con una limitación real y documentada) · **PENDIENTE** (no implementado, o bloqueado) · **NO APLICA** (fuera del alcance de acreditación congelado v1.0).
 
-Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitarias en verde.
+Corte de este documento: commit `358260d` (2026-09-30), 299/299 pruebas unitarias en verde.
 
 ## A. Motor criptográfico y PAdES
 
@@ -65,6 +65,7 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 | SAST (CodeQL) | **CUMPLE** | 12.19/12.43 — encontró y corrigió que el repositorio privado invalidaba el gate |
 | SCA (dependencias vulnerables) | **CUMPLE** | 12.19 — sin hallazgos en 34 proyectos |
 | SBOM (CycloneDX) por build | **CUMPLE** | 12.18 |
+| Evidencia (SBOM/manifiesto/instalador) permanente por release, no solo 90 días de Actions | **CUMPLE** | 12.65 — assets del Release vía `gh release upload --clobber`, verificado en vivo contra `securesign-sfd-v1.0.0` real; el disparo automático por push de tag aún no se ejecutó de punta a punta (ver alcance no cubierto en el RUNBOOK) |
 | Ramas protegidas contra force-push/borrado | **CUMPLE** | 12.44 |
 
 ## F. Firmador Local (aplicación de escritorio)
@@ -80,6 +81,7 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 | Control | Estado | Evidencia (RUNBOOK) |
 |---|---|---|
 | Pipeline de firma Authenticode (construcción, verificación, CI) | **CUMPLE** (el pipeline en sí) | 12.35 — probado de punta a punta con certificado de prueba y sello de tiempo real de DigiCert |
+| Verificador independiente de firma de código (para un tercero, sin conocer quién firmó) | **CUMPLE** | 12.64 — `Verificar-FirmaCodigo.ps1`, `docs/07-seguridad/code-signing.md`; probado en vivo, encontró y corrigió 2 bugs reales |
 | Firma Authenticode real del EXE/MSI | **PENDIENTE** | Bloqueado por procura — requiere comprar un certificado de firma de código (ver `evidencias-requeridas.md`) |
 | Instalador MSI (por usuario, sin administrador) | **CUMPLE** | 12.35, probado en runner limpio de CI |
 | Versionado SemVer separado del metadato de build | **CUMPLE** | 12.45 |
@@ -90,7 +92,7 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 |---|---|---|
 | Cero referencias a "Rúbrica"/"SecureSign Perú" en artefactos distribuibles | **CUMPLE** | 12.41 — verificado de nuevo en esta consolidación, cero coincidencias reales |
 | Nombre del repositorio GitHub | **CUMPLE** | 12.62 — `hlucasgit/securesign-peru` |
-| SDKs (.NET/JS/Python) funcionales contra la API real | **CUMPLE** (forma agrupada por recurso, no plana) | 12.47 — bug real de SDK JS encontrado y corregido en el camino |
+| SDKs (.NET/JS/Python) funcionales contra la API real | **CUMPLE** | 12.47 (bug real de SDK JS encontrado y corregido) + 12.67 (atajos planos agregados sobre el agrupado por recurso, a pedido explícito del usuario) — ambos estilos disponibles, `docs/05-integracion/sdk/README.md` |
 | Manuales de usuario, administrador e integración | **CUMPLE** | `docs/08-cumplimiento/manual-*.md` |
 | Auditoría documentación-vs-código | **PARCIAL** | 12.55 — 8 fuentes principales corregidas; manuales `.docx` distribuibles y `docs/02-04/06` sin re-auditar línea por línea con agente dedicado |
 
@@ -101,21 +103,22 @@ Corte de este documento: commit `ca5c898` (2026-09-29), 299/299 pruebas unitaria
 | `main` verde de forma sostenida | **CUMPLE** | Historial de runs de CI |
 | `release/1.0` sincronizado con `main` | **CUMPLE** | 12.60, vía PR (no push directo) |
 | Build reproducible | **CUMPLE** | Documentado en cada fase de este RUNBOOK |
+| Expediente para INDECOPI (10 carpetas, fecha/versión/hash/responsable por evidencia) | **CUMPLE** | 12.68 — `scripts/Generar-Expediente.ps1`, generado bajo demanda desde las fuentes reales (nunca una copia estática); verificado en vivo, 27 archivos reales catalogados, incluida una corrida real de `dotnet test` y el SBOM real descargado del Release |
 
 ## J. Seguridad ofensiva
 
 | Control | Estado | Evidencia |
 |---|---|---|
-| Pentest externo | **PENDIENTE** | No contratado — procura del usuario, ver `evidencias-requeridas.md`. Documentación de preparación en `docs/10-pentest/` (Agente 5, pendiente de construir) |
+| Pentest externo | **PENDIENTE** (preparación CUMPLE) | No contratado — procura del usuario, ver `evidencias-requeridas.md`. Preparación completa en `docs/10-pentest/` (RUNBOOK 12.66): alcance, modelo de atacante (5 perfiles reales), casos de prueba concretos por área con lo ya cubierto internamente marcado aparte de lo que queda como foco real para el pentester |
 | Vulnerabilidades encontradas internamente cerradas | **CUMPLE** (las conocidas hasta hoy) | SSRF (12.63) es la única vulnerabilidad de seguridad real encontrada fuera de un informe formal en esta sesión, y ya está cerrada |
 
 ## Resumen numérico
 
-Conteo real de las 53 filas de las 10 secciones anteriores (A–J):
+Conteo real de las 56 filas de las 10 secciones anteriores (A–J):
 
 | Clasificación | Filas |
 |---|---|
-| CUMPLE | 43 |
+| CUMPLE | 46 |
 | PARCIAL | 5 |
 | PENDIENTE | 4 |
 | NO APLICA | 1 |

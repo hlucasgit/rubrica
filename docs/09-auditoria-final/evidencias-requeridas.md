@@ -16,6 +16,7 @@ Qué evidencia ya existe, dónde vive, y qué falta generar para un expediente f
 | Verificaciones en vivo contra infraestructura real (no simulacro) | Citadas dentro de cada sección relevante del RUNBOOK | TSL/CRL real de INDECOPI (12.9/12.17/12.38/12.50/12.52), DNIe físico real (12.9/12.61), 3 EC acreditadas reales (12.58), gate de PR con hallazgo real en el camino (12.60) |
 | Manuales | `docs/08-cumplimiento/manual-usuario-firmador-local.md`, `manual-administrador.md`, `docs/05-integracion/manual-integracion-api.md` | Completos |
 | Manuales distribuibles en Word | `docs/08-cumplimiento/manuales-distribuibles/*.docx` | Regenerados contra el estado actual (RUNBOOK 12.56); validación XSD hecha, sin render visual en Word real (limitación de entorno, disclosed) |
+| Verificador independiente de firma de código | `src/backend/src/Tools/SecureSign.FirmadorLocal/installer/Verificar-FirmaCodigo.ps1`, `docs/07-seguridad/code-signing.md` | Probado en vivo con certificado de prueba real; encontró y corrigió 2 bugs reales del propio script (RUNBOOK 12.64) |
 
 ## 2. Evidencia que falta generar
 
