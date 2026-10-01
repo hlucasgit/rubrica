@@ -90,11 +90,31 @@ jobs:
       # Crear". Genera un inventario real de dependencias (CycloneDX) en
       # cada build, no solo para releases — así un PR que introduce una
       # dependencia nueva queda reflejado de inmediato.
+      # RUNBOOK.md 12.69 — hallazgo real: dotnet-CycloneDX NO normaliza los separadores de ruta `\` que trae un
+      # .slnf (Visual Studio siempre los genera así; el propio SDK de .NET sí los normaliza al compilar/restaurar
+      # en Linux, pero esta herramienta de terceros no) — en el runner Ubuntu, cada ruta de proyecto se trataba
+      # como un único nombre de archivo inválido ("Project file ... does not exist" para los 36 proyectos),
+      # "Found 0 packages", y un SBOM vacío publicado como si hubiera funcionado (exit 0, sin ningún error).
+      # Se genera una copia del .slnf con `/` SOLO para esta herramienta — el archivo real del repositorio
+      # queda intacto, con `\`, para que Visual Studio en Windows lo siga abriendo sin problema. Un primer
+      # intento escribió la copia en /tmp/ y volvió a fallar ("Found 0 packages" otra vez, con las rutas ahora
+      # buscadas bajo /tmp/src/...): dotnet-CycloneDX resuelve las rutas de un .slnf RELATIVAS AL DIRECTORIO
+      # DEL PROPIO ARCHIVO, no al directorio de trabajo — la copia tiene que vivir junto al original.
       - name: Generar SBOM del backend (CycloneDX)
         run: |
           dotnet tool install --global CycloneDX
           export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet-CycloneDX src/backend/SecureSign.Backend.slnf -o sbom --exclude-test-projects -F Json -sn SecureSign-Backend -sv ${{ github.sha }}
+          python3 -c "
+          import json
+          with open('src/backend/SecureSign.Backend.slnf') as f:
+              datos = json.load(f)
+          barra_invertida = chr(92)  # evita cualquier ambigüedad de escapado bash/YAML/Python con un '\\' literal
+          datos['solution']['path'] = datos['solution']['path'].replace(barra_invertida, '/')
+          datos['solution']['projects'] = [p.replace(barra_invertida, '/') for p in datos['solution']['projects']]
+          with open('src/backend/SecureSign.Backend.linux.slnf', 'w') as f:
+              json.dump(datos, f)
+          "
+          dotnet-CycloneDX src/backend/SecureSign.Backend.linux.slnf -o sbom --exclude-test-projects -F Json -sn SecureSign-Backend -sv ${{ github.sha }}
 
       - name: Publicar SBOM del backend
         uses: actions/upload-artifact@v7
