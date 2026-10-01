@@ -294,7 +294,7 @@ internal static class Program
                 "El documento descargado no coincide con el hash que autorizó el ticket de firma — operación rechazada por seguridad.", null);
         }
 
-        var candidatos = EnumerarCertificados();
+        var candidatos = EnumerarTodosLosCandidatos();
 
         int indiceElegido = -1;
         string pin = string.Empty;
@@ -325,12 +325,24 @@ internal static class Program
         // INDECOPI/IOFE, hallazgo P0-03. Degradar en silencio a la firma
         // desacoplada dejaría un flujo marcado "Firmado" sin que exista
         // realmente el PAdES que el propio Firmador Local promete generar.
+        byte[] certDer;
+        Func<byte[], byte[]> firmarHash;
+        try
+        {
+            (certDer, firmarHash) = ResolverCredencial(elegido, pin);
+        }
+        catch (Exception ex)
+        {
+            pin = string.Empty;
+            return new ResultadoFirma(false, $"No se pudo abrir el certificado elegido — revisa el PIN/contraseña. Detalle: {ex.Message}", null);
+        }
+
         bool esPdf = tipoContenido.Contains("pdf", StringComparison.OrdinalIgnoreCase);
         ResultadoPreparacionPades? preparadoPades = null;
         string? nombreFirmante = null;
         if (esPdf)
         {
-            using var certificadoParaNombre = new X509Certificate2(elegido.CertDer);
+            using var certificadoParaNombre = new X509Certificate2(certDer);
             nombreFirmante = certificadoParaNombre.GetNameInfo(X509NameType.SimpleName, false);
             try
             {
@@ -343,17 +355,17 @@ internal static class Program
             }
         }
 
-        var firma = FirmarConTarjeta(elegido.SlotId, elegido.CkaId, hash, pin);
+        var firma = firmarHash(hash);
 
         string? documentoPadesBase64 = null;
         if (esPdf && preparadoPades is { } preparado)
         {
             try
             {
-                using var certificado = new X509Certificate2(elegido.CertDer);
+                using var certificado = new X509Certificate2(certDer);
                 byte[] cms = CmsBuilder.Firmar(
                     preparado.ContenidoCubierto, certificado, cadenaCertificacion: null,
-                    datos => FirmarConTarjeta(elegido.SlotId, elegido.CkaId, SHA256.HashData(datos), pin));
+                    datos => firmarHash(SHA256.HashData(datos)));
                 cms = await IntentarAgregarSelloTiempoAsync(cms);
                 documentoPadesBase64 = Convert.ToBase64String(PdfSignaturePlaceholder.Inyectar(preparado, cms));
             }
@@ -364,12 +376,12 @@ internal static class Program
                     $"La tarjeta ya firmó el hash del documento, pero no se pudo completar la firma PAdES — se abortó SIN enviar nada a SecureSign, para no dejar un flujo marcado como firmado sin PAdES real. Detalle: {ex.Message}", null);
             }
         }
-        pin = string.Empty; // no persistir el PIN en memoria más de lo necesario
+        pin = string.Empty; // no persistir el PIN/contraseña en memoria más de lo necesario
 
         var cuerpo = new
         {
             firmaBase64 = Convert.ToBase64String(firma),
-            certificadoBase64 = Convert.ToBase64String(elegido.CertDer),
+            certificadoBase64 = Convert.ToBase64String(certDer),
             algoritmo = "RsaSha256",
             documentoPadesBase64,
         };
@@ -422,25 +434,109 @@ internal static class Program
         }
     }
 
+    // ---------- Origen del certificado: token PKCS#11 (DNIe u otro), o archivo .pfx/.p12 ----------
+
+    /// <summary>
+    /// Enumera TODOS los candidatos disponibles — token(s) PKCS#11 conectados
+    /// (si hay middleware y lector) más, si está configurado,
+    /// <see cref="RutaArchivoPfx"/> (certificado de software, p. ej. uno
+    /// descargado de una EC acreditada sin token físico — ver RUNBOOK.md
+    /// 12.72). Ninguna de las dos fuentes es obligatoria: un equipo con solo
+    /// un .pfx configurado y sin lector conectado igual puede firmar.
+    /// </summary>
+    private static List<CandidatoCertificado> EnumerarTodosLosCandidatos()
+    {
+        var candidatos = new List<CandidatoCertificado>();
+        candidatos.AddRange(EnumerarCertificadosPkcs11());
+        if (RutaArchivoPfx is { } ruta)
+            candidatos.Add(new CandidatoCertificado(0, [], $"Certificado de archivo — {Path.GetFileName(ruta)}", [], ruta));
+
+        if (candidatos.Count == 0)
+            throw new InvalidOperationException(
+                "No se encontró ningún certificado de firma — ni en un token/tarjeta PKCS#11 conectado, ni configurado vía SECURESIGN_PFX_PATH.");
+
+        return candidatos;
+    }
+
+    /// <summary>Ruta a un certificado de software (.pfx/.p12) configurado vía variable de entorno — ver RUNBOOK.md 12.72.</summary>
+    private static string? RutaArchivoPfx
+    {
+        get
+        {
+            var ruta = Environment.GetEnvironmentVariable("SECURESIGN_PFX_PATH");
+            return string.IsNullOrWhiteSpace(ruta) || !File.Exists(ruta) ? null : ruta;
+        }
+    }
+
+    /// <summary>
+    /// Resuelve, para el candidato elegido por el usuario, los bytes DER del
+    /// certificado y una función de firma — unifica el token PKCS#11 (ya
+    /// probado contra el DNIe real, RUNBOOK.md 12.70) y el certificado de
+    /// archivo (nuevo) detrás de la misma forma, para no bifurcar el resto
+    /// del flujo de <see cref="EjecutarFirmaAsync"/>.
+    /// </summary>
+    private static (byte[] CertDer, Func<byte[], byte[]> Firmar) ResolverCredencial(CandidatoCertificado candidato, string pin)
+    {
+        if (candidato.RutaArchivoPfx is { } ruta)
+        {
+            // Se abre una sola vez aquí (para leer el certificado público) y
+            // de nuevo en cada FirmarConArchivo — mismo criterio que el
+            // camino PKCS#11: nunca se mantiene la llave privada descifrada
+            // en memoria más tiempo del estrictamente necesario para UNA
+            // operación de firma.
+            using var cert = new X509Certificate2(ruta, pin, X509KeyStorageFlags.EphemeralKeySet);
+            return (cert.RawData, hash => FirmarConArchivo(ruta, hash, pin));
+        }
+        return (candidato.CertDer, hash => FirmarConTarjeta(candidato.SlotId, candidato.CkaId, hash, pin));
+    }
+
+    /// <summary>
+    /// Firma con la llave privada RSA de un certificado de software (.pfx) —
+    /// mismo esquema PKCS#1 v1.5 + SHA-256 que <see cref="FirmarConTarjeta"/>
+    /// usa vía PKCS#11 (CKM_RSA_PKCS sobre un DigestInfo), así que el backend
+    /// verifica ambos caminos exactamente igual (algoritmo = "RsaSha256").
+    /// </summary>
+    private static byte[] FirmarConArchivo(string ruta, byte[] hashDocumento, string pin)
+    {
+        using var cert = new X509Certificate2(ruta, pin, X509KeyStorageFlags.EphemeralKeySet | X509KeyStorageFlags.Exportable);
+        using RSA rsa = cert.GetRSAPrivateKey()
+            ?? throw new InvalidOperationException("El certificado de archivo no tiene una llave privada RSA utilizable.");
+        return rsa.SignHash(hashDocumento, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+    }
+
     // ---------- PKCS#11 (misma lógica probada en ProveedorCriptograficoPkcs11 / DnieProbe) ----------
 
     private static string RutaLibreriaPkcs11 =>
         Environment.GetEnvironmentVariable("SECURESIGN_PKCS11_LIB")
         ?? @"C:\Program Files\IDEMIA\IDPlugClassic\DLLs\idplug-pkcs11.dll";
 
-    private sealed record CandidatoCertificado(ulong SlotId, byte[] CkaId, string Descripcion, byte[] CertDer);
+    private sealed record CandidatoCertificado(ulong SlotId, byte[] CkaId, string Descripcion, byte[] CertDer, string? RutaArchivoPfx = null);
 
     /// <summary>
-    /// Enumera los certificados de firma (no-CA) de los tokens conectados,
-    /// sin ninguna interacción — la elección la hace el usuario en
-    /// <see cref="VentanaFirma"/>, no aquí.
+    /// Enumera los certificados de firma (no-CA) de los tokens PKCS#11
+    /// conectados, sin ninguna interacción — la elección la hace el usuario
+    /// en <see cref="VentanaFirma"/>, no aquí. Tolerante a que no haya
+    /// middleware/lector/token: devuelve una lista vacía en vez de lanzar,
+    /// para que un equipo que solo usa un certificado de archivo
+    /// (<see cref="RutaArchivoPfx"/>) no se bloquee por esto.
     /// </summary>
-    private static List<CandidatoCertificado> EnumerarCertificados()
+    private static List<CandidatoCertificado> EnumerarCertificadosPkcs11()
     {
-        var factory = new Pkcs11InteropFactories();
-        using IPkcs11Library pkcs11 = factory.Pkcs11LibraryFactory.LoadPkcs11Library(factory, RutaLibreriaPkcs11, AppType.SingleThreaded);
-
         var candidatos = new List<CandidatoCertificado>();
+
+        Pkcs11InteropFactories factory;
+        IPkcs11Library pkcs11;
+        try
+        {
+            factory = new Pkcs11InteropFactories();
+            pkcs11 = factory.Pkcs11LibraryFactory.LoadPkcs11Library(factory, RutaLibreriaPkcs11, AppType.SingleThreaded);
+        }
+        catch (Exception)
+        {
+            return candidatos; // sin middleware/lector disponible — no es un error si hay un certificado de archivo configurado
+        }
+
+        using (pkcs11)
         foreach (var slot in pkcs11.GetSlotList(SlotsType.WithTokenPresent))
         {
             using ISession session = slot.OpenSession(SessionType.ReadOnly);
@@ -463,10 +559,6 @@ internal static class Program
                 candidatos.Add(new CandidatoCertificado(slot.SlotId, ckaId, $"{etiqueta} — {x509.Subject}", valor));
             }
         }
-
-        if (candidatos.Count == 0)
-            throw new InvalidOperationException(
-                "No se encontró ningún certificado de firma en los tokens conectados. Verifica que la tarjeta esté insertada.");
 
         return candidatos;
     }
