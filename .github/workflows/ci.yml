@@ -96,7 +96,10 @@ jobs:
       # como un único nombre de archivo inválido ("Project file ... does not exist" para los 36 proyectos),
       # "Found 0 packages", y un SBOM vacío publicado como si hubiera funcionado (exit 0, sin ningún error).
       # Se genera una copia del .slnf con `/` SOLO para esta herramienta — el archivo real del repositorio
-      # queda intacto, con `\`, para que Visual Studio en Windows lo siga abriendo sin problema.
+      # queda intacto, con `\`, para que Visual Studio en Windows lo siga abriendo sin problema. Un primer
+      # intento escribió la copia en /tmp/ y volvió a fallar ("Found 0 packages" otra vez, con las rutas ahora
+      # buscadas bajo /tmp/src/...): dotnet-CycloneDX resuelve las rutas de un .slnf RELATIVAS AL DIRECTORIO
+      # DEL PROPIO ARCHIVO, no al directorio de trabajo — la copia tiene que vivir junto al original.
       - name: Generar SBOM del backend (CycloneDX)
         run: |
           dotnet tool install --global CycloneDX
@@ -108,10 +111,10 @@ jobs:
           barra_invertida = chr(92)  # evita cualquier ambigüedad de escapado bash/YAML/Python con un '\\' literal
           datos['solution']['path'] = datos['solution']['path'].replace(barra_invertida, '/')
           datos['solution']['projects'] = [p.replace(barra_invertida, '/') for p in datos['solution']['projects']]
-          with open('/tmp/SecureSign.Backend.linux.slnf', 'w') as f:
+          with open('src/backend/SecureSign.Backend.linux.slnf', 'w') as f:
               json.dump(datos, f)
           "
-          dotnet-CycloneDX /tmp/SecureSign.Backend.linux.slnf -o sbom --exclude-test-projects -F Json -sn SecureSign-Backend -sv ${{ github.sha }}
+          dotnet-CycloneDX src/backend/SecureSign.Backend.linux.slnf -o sbom --exclude-test-projects -F Json -sn SecureSign-Backend -sv ${{ github.sha }}
 
       - name: Publicar SBOM del backend
         uses: actions/upload-artifact@v7
